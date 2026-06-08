@@ -27,8 +27,9 @@ comparison scorecard.
 - **Two tasks** run through the loops (feature add + planted-bug fix).
 - **Two loop shapes**, run side by side on each task (4 runs total).
 - The Sonar-native AC/DC stack on **GitHub**: Claude Code (agent), SonarQube
-  Cloud (deterministic Verify), Gitar (agentic review + remediation), GitHub
-  Actions (tests/CI).
+  Cloud — accessed pre-PR via the MCP server's Agentic Analysis (Loop 1) and
+  post-PR via PR analysis (Loop 2) — Gitar (agentic review + remediation), and
+  GitHub Actions (tests/CI).
 - A scorecard capturing the comparison across all runs.
 
 ### Out of scope (YAGNI)
