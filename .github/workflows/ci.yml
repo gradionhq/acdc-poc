@@ -15,6 +15,8 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run test:cov --workspace server
+      - run: npm run test:cov --workspace web
+      - run: npm run build
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v4
         env:
