@@ -121,6 +121,10 @@ git commit -m "chore: add root workspace manifest and shared tsconfig"
 mkdir -p server
 git mv src server/src
 git mv test server/test
+# Remove the now-stale root configs (they point at the moved src/test paths and
+# would fail on a bare `tsc`/`vitest`; each workspace owns its own config).
+git rm tsconfig.json vitest.config.ts
+rm -rf dist coverage   # orphaned local build artifacts, if any
 ```
 
 - [ ] **Step 2: Create `server/package.json`**
@@ -307,6 +311,7 @@ Goal: a minimal React+Vite notes UI calling `/api/notes`, with a Vite dev proxy,
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.0",
     "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
