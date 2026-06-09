@@ -11,13 +11,13 @@ fairness note.
 
 | Metric | A1 | A2 | B1 | B2 |
 |--------|----|----|----|----|
-| Rework cycles (Verify→Solve iterations before green) | **0** (self-verify found 0 issues on 1st pass) | **0** | **0** (self-verify found 0; bug found via reasoning, not analysis) | |
-| Issues caught — count & stage | **Pre-PR self-verify (`analyze_code_snippet`): 0. Sonar PR analysis: 0 new (gate passed, 100% cov). Gitar: 4 findings (1 bug, 1 security, 1 perf, 1 quality-resolved)** | **Sonar: 5 new (gate PASSED, non-blocking); Gitar: 1 (quality)** | **Self-verify: 0. Sonar PR: 0 new (gate passed, 100% cov). Gitar: 1 (quality — relaxed tests now redundant)** | |
-| Regressions or test failures (stage caught) | **None in tests** (15/15) — but Gitar found a latent **memory-leak bug** tests didn't cover | **None** (CI green) | **None** (9/9; build clean) | |
-| Escaped issues at end | **2 real issues escaped self-verify, caught only by Gitar: (a) memory leak on note delete, (b) download missing `nosniff`. Loop 1 ended at self-verify, so neither was fixed.** | **Security: 0 escaped (1 partial). Gitar test-quality finding left unaddressed.** | **None material** (bug fixed; Gitar's redundant-test nit non-blocking) | |
-| Task B correctness: acceptance test passes? (Y/N) | n/a | n/a | **Y** (independent hidden acceptance test passes vs PR #7) | |
-| Human-attention events | **1 (agent paused to ask before committing/opening PR — deviated from "don't ask")** | **0 (confirmed — fully autonomous)** | **0** (hands-off; "open PR yourself" instruction added) | |
-| Rough effort (qualitative) | **TDD + single self-verify pass (PR #6)** | **Single pass, ~minutes (PR 15:07 → Sonar 15:09 → Gitar 15:11)** | **Single pass; correct 1-line fix + strict regression tests (PR #7)** | |
+| Rework cycles (Verify→Solve iterations before green) | **0** (self-verify found 0 issues on 1st pass) | **0** | **0** (self-verify found 0; bug found via reasoning, not analysis) | **0** (first cut green; Gitar approved, nothing to iterate) |
+| Issues caught — count & stage | **Pre-PR self-verify (`analyze_code_snippet`): 0. Sonar PR analysis: 0 new (gate passed, 100% cov). Gitar: 4 findings (1 bug, 1 security, 1 perf, 1 quality-resolved)** | **Sonar: 5 new (gate PASSED, non-blocking); Gitar: 1 (quality)** | **Self-verify: 0. Sonar PR: 0 new (gate passed, 100% cov). Gitar: 1 (quality — relaxed tests now redundant)** | **Sonar PR: 0 new (gate passed, 100% cov). Gitar: 0 (✅ Approved, no findings)** |
+| Regressions or test failures (stage caught) | **None in tests** (15/15) — but Gitar found a latent **memory-leak bug** tests didn't cover | **None** (CI green) | **None** (9/9; build clean) | **None** (7/7; build clean) |
+| Escaped issues at end | **2 real issues escaped self-verify, caught only by Gitar: (a) memory leak on note delete, (b) download missing `nosniff`. Loop 1 ended at self-verify, so neither was fixed.** | **Security: 0 escaped (1 partial). Gitar test-quality finding left unaddressed.** | **None material** (bug fixed; Gitar's redundant-test nit non-blocking) | **None** (bug fixed; Gitar approved clean) |
+| Task B correctness: acceptance test passes? (Y/N) | n/a | n/a | **Y** (independent hidden acceptance test passes vs PR #7) | **Y** (independent hidden acceptance test passes vs PR #8) |
+| Human-attention events | **1 (agent paused to ask before committing/opening PR — deviated from "don't ask")** | **0 (confirmed — fully autonomous)** | **0** (hands-off; "open PR yourself" instruction added) | **0** (hands-off) |
+| Rough effort (qualitative) | **TDD + single self-verify pass (PR #6)** | **Single pass, ~minutes (PR 15:07 → Sonar 15:09 → Gitar 15:11)** | **Single pass; correct 1-line fix + strict regression tests (PR #7)** | **Single pass; correct 1-line fix; restored the relaxed tests to strict (PR #8)** |
 
 ## A2 — detailed log (Task A feature, Loop 2 post-PR)
 
@@ -164,8 +164,13 @@ verification layer depends on the *class* of issue.
   1 stops before post-PR review. **Takeaway: layer deterministic + AI review;
   don't treat pre-commit self-verify as a replacement for review.** (n=1 per cell;
   agent-variance caveat above.)
-- **Loop 1 vs Loop 2 on Task B:** B1 (Loop 1) fixed the bug correctly with 0
-  rework; deterministic self-verify was irrelevant to a behavioral bug (correctness
-  came from reasoning + regression test). *Awaiting B2 (Loop 2) to see whether
-  post-PR review would catch a wrong/incomplete fix — though if B2's agent also
-  fixes it cleanly, Task B won't strongly discriminate the loops.*
+- **Loop 1 vs Loop 2 on Task B:** **Both loops fixed the bug correctly** (the
+  independent hidden acceptance test passes against both PR #7 and PR #8), each
+  with 0 rework and no human intervention. Neither loop's deterministic checks
+  contributed to finding the bug — correctness came from the **Guide + agent
+  reasoning + a regression test** in both. The only difference was test hygiene
+  (agent-variance, not loop shape): B1 added strict tests but left the relaxed
+  ones → Gitar flagged them as redundant; B2 restored the relaxed tests to strict
+  → Gitar approved clean. **Takeaway: for a clear-cut logic bug, loop shape barely
+  matters** — verification value is low because the issue class is behavioral, and
+  the fix is driven by reasoning + tests.
