@@ -1,7 +1,15 @@
 [
-  { "name": "agent-ready", "color": "0e8a16", "description": "Fully specified; an agent may take it unsupervised" },
+  {
+    "name": "agent-ready",
+    "color": "0e8a16",
+    "description": "Fully specified; an agent may take it unsupervised"
+  },
   { "name": "needs-human", "color": "d93f0b", "description": "Requires a human decision or input" },
-  { "name": "blocked", "color": "b60205", "description": "Blocked by another issue or external dependency" },
+  {
+    "name": "blocked",
+    "color": "b60205",
+    "description": "Blocked by another issue or external dependency"
+  },
   { "name": "type:feature", "color": "1d76db", "description": "New functionality" },
   { "name": "type:bug", "color": "d73a4a", "description": "Something isn't working" },
   { "name": "type:chore", "color": "c5def5", "description": "Tooling, deps, or maintenance" },
