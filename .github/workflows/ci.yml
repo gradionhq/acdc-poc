@@ -47,6 +47,6 @@ jobs:
               body: `🎥 **Proof-of-work**: Playwright report + video artifact for this run → ${run} (see the \`playwright-report\` artifact).`,
             });
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
