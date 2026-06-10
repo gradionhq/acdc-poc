@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createNote, deleteNote, listNotes, updateNote, type Note } from './api';
 
 const PAGE_SIZE = 5;
+const SEARCH_DEBOUNCE_MS = 300;
 
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -13,6 +14,8 @@ export function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [query, setQuery] = useState('');
 
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
@@ -20,10 +23,10 @@ export function App() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  async function refresh(p = page) {
+  async function refresh(p = page, q = query) {
     const seq = ++reqSeqRef.current;
     try {
-      const result = await listNotes(p, PAGE_SIZE);
+      const result = await listNotes(p, PAGE_SIZE, q);
       if (seq !== reqSeqRef.current) return; // stale — a newer request is in flight
       setNotes(result.notes);
       setTotal(result.total);
@@ -34,9 +37,19 @@ export function App() {
   }
 
   useEffect(() => {
-    void refresh(page);
+    void refresh(page, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, query]);
+
+  // Debounce search input: update `query` after SEARCH_DEBOUNCE_MS of inactivity.
+  // Reset to page 1 whenever the query changes so results are always from the start.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPage(1);
+      setQuery(searchInput);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -108,6 +121,15 @@ export function App() {
     <main>
       <h1>Notes</h1>
       {error && <p role="alert">{error}</p>}
+      <label>
+        Search
+        <input
+          aria-label="Search notes"
+          placeholder="Search notes…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+        />
+      </label>
       <form onSubmit={onSubmit}>
         <label>
           Title

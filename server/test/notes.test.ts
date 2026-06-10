@@ -104,6 +104,45 @@ describe('notes API', () => {
     expect(res.body).toEqual({ error: 'payload must be an object' });
   });
 
+  it('filters notes by q param case-insensitively', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'Hello World', body: 'foo' }).expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'Goodbye', body: 'World here' })
+      .expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'Unrelated', body: 'no match' })
+      .expect(201);
+
+    const res = await request(app).get('/api/notes?q=world').expect(200);
+    expect(res.headers['x-total-count']).toBe('2');
+    expect(res.body).toHaveLength(2);
+    const titles = (res.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles).toContain('Hello World');
+    expect(titles).toContain('Goodbye');
+  });
+
+  it('returns all notes when q param is empty', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'a', body: 'b' }).expect(201);
+    await request(app).post('/api/notes').send({ title: 'c', body: 'd' }).expect(201);
+
+    const res = await request(app).get('/api/notes?q=').expect(200);
+    expect(res.headers['x-total-count']).toBe('2');
+    expect(res.body).toHaveLength(2);
+  });
+
+  it('ignores non-string q param values', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'a', body: 'b' }).expect(201);
+
+    // q[] is an array — should be ignored, returning all notes
+    const res = await request(app).get('/api/notes?q[]=foo').expect(200);
+    expect(res.headers['x-total-count']).toBe('1');
+  });
+
   it('reflects the updated note in subsequent GET and list responses', async () => {
     const app = createApp();
     const created = await request(app)

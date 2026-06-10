@@ -51,11 +51,24 @@ function mockFetchSequence() {
         notes = notes.filter((n) => n.id !== id);
         return new Response(null, { status: 204 });
       }
-      // Parse page/pageSize from URL
+      // Parse page/pageSize/q from URL
       const urlObj = new URL(url as string, 'http://localhost');
       const page = Number(urlObj.searchParams.get('page') ?? '1');
       const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
-      return buildResponse(notes, page, pageSize);
+      const q = urlObj.searchParams.get('q') ?? '';
+      const term = q.trim().toLowerCase();
+      const filtered =
+        term === ''
+          ? notes
+          : notes.filter(
+              (n) => n.title.toLowerCase().includes(term) || n.body.toLowerCase().includes(term),
+            );
+      const start = (page - 1) * pageSize;
+      const items = filtered.slice(start, start + pageSize);
+      return new Response(JSON.stringify(items), {
+        status: 200,
+        headers: { 'X-Total-Count': String(filtered.length) },
+      });
     }),
   );
 }
@@ -252,6 +265,45 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /previous/i }));
     await waitFor(() => expect(screen.getByText('Note 1')).toBeInTheDocument());
     expect(screen.queryByText('Note 6')).not.toBeInTheDocument();
+  });
+
+  it('search box filters the note list', async () => {
+    render(<App />);
+
+    // Create two notes with different titles
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Alpha note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'first body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Alpha note')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Beta note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'second body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Beta note')).toBeInTheDocument());
+
+    // Type in the search box — debounce fires after 300 ms (vi fake timers
+    // are not used here; userEvent.type triggers the timer naturally via
+    // the real timer in jsdom so we wait for the UI to update instead).
+    await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'Alpha');
+    await waitFor(() => expect(screen.queryByText('Beta note')).not.toBeInTheDocument());
+    expect(screen.getByText('Alpha note')).toBeInTheDocument();
+
+    // Clearing the search restores both notes
+    await userEvent.clear(screen.getByRole('textbox', { name: /search notes/i }));
+    await waitFor(() => expect(screen.getByText('Beta note')).toBeInTheDocument());
+    expect(screen.getByText('Alpha note')).toBeInTheDocument();
+  });
+
+  it('search with no matches shows an empty list', async () => {
+    render(<App />);
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Unique note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'some content');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Unique note')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'zzznomatch');
+    await waitFor(() => expect(screen.queryByText('Unique note')).not.toBeInTheDocument());
   });
 });
 

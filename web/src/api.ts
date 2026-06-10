@@ -17,8 +17,15 @@ export interface NotesPage {
 
 const base = '/api/notes';
 
-export async function listNotes(page = 1, pageSize = 5): Promise<NotesPage> {
-  const res = await fetch(`${base}?page=${page}&pageSize=${pageSize}`);
+export async function listNotes(page = 1, pageSize = 5, query?: string): Promise<NotesPage> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  if (query !== undefined && query !== '') {
+    params.set('q', query);
+  }
+  const res = await fetch(`${base}?${params.toString()}`);
   if (!res.ok) throw new Error('failed to load notes');
   const raw = Number(res.headers.get('X-Total-Count'));
   const total = Number.isFinite(raw) && raw >= 0 ? raw : 0;

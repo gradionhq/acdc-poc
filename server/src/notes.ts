@@ -12,7 +12,8 @@ export function createNotesRouter(store: NoteStore): Router {
   router.get('/', (req: Request, res: Response) => {
     const page = parsePositiveInt(req.query.page, 1);
     const pageSize = parsePositiveInt(req.query.pageSize, 10);
-    const result = store.list(page, pageSize);
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    const result = store.list(page, pageSize, q);
     res.set('X-Total-Count', String(result.total));
     res.json(result.items);
   });

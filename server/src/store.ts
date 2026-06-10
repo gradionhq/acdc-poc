@@ -48,8 +48,16 @@ export class NoteStore {
     return this.notes.delete(id);
   }
 
-  list(page: number, pageSize: number): ListResult {
-    const all = [...this.notes.values()].sort((a, b) => a.createdAt - b.createdAt);
+  list(page: number, pageSize: number, query?: string): ListResult {
+    const term = query ? query.trim().toLowerCase() : '';
+    const all = [...this.notes.values()]
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .filter(
+        (n) =>
+          term === '' ||
+          n.title.toLowerCase().includes(term) ||
+          n.body.toLowerCase().includes(term),
+      );
     const start = (page - 1) * pageSize;
     return { items: all.slice(start, start + pageSize), total: all.length };
   }
