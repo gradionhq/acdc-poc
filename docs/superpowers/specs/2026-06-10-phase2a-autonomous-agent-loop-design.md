@@ -62,7 +62,10 @@ The session orchestrates; subagents do the work. For the one 2a issue:
 1. **Pick the issue** — #21 (pagination controls).
 2. **Implement** — spawn an implementer subagent in a **git worktree** off fresh
    `main`. It: reads the issue's acceptance criteria + `CLAUDE.md`; implements the
-   feature; **adds a Playwright e2e covering it (proof-of-work)**; runs the green
+   feature; **adds a Playwright e2e covering it (proof-of-work)** — the Phase 1
+   `playwright.config.ts` already sets `video: 'on'`, and CI uploads the
+   report/video as an artifact + comments the link on the PR, so the implementer
+   just needs a passing e2e for the proof video to be produced; runs the green
    bar locally (lint + tests + e2e); commits (Conventional Commits); pushes the
    branch; opens a PR that closes the issue.
 3. **Review (bake-off)** — Gitar + CodeRabbit + Claude Code review auto-review the
@@ -102,8 +105,13 @@ list**, judge each, and record per reviewer:
 | Verdict state | approved / commented / changes-requested; gave applyable fixes? |
 
 Plus a per-PR cross-reviewer summary (most real issues, noisiest, unique catches,
-signal-to-noise). Findings stay on the PR (durable evidence); the scorecard +
-narrative go on `experiment-control`.
+signal-to-noise). **Dedup rule:** two findings are "the same" if they target the
+same file + overlapping lines OR the same root cause; "unique catch" = a real issue
+no other reviewer raised under that rule. Findings stay on the PR (durable
+evidence); the scorecard + narrative go on `experiment-control`. **Any dismissals
+the resolver makes are surfaced in the scorecard (and remain visible on the PR)**
+so the autonomous loop's judgment is auditable after the fact — governance by
+review of record, not per-step approval.
 
 **Recorded caveats:** the implementers are Claude (this session) and the Claude
 Code reviewer is also Claude — independent instances, same model family, so
@@ -123,8 +131,11 @@ Claude-on-Claude review may be softer (a real finding). n is small.
 2. **Resolve-loop ping-pong** — a fix can spawn new findings; capped at ≤3
    iterations, then stop and record what remains.
 3. **"Blocking" threshold** — bug / security / Medium+ are must-resolve; nits are
-   optional (dismissal recorded). Concrete, but reviewers' severity scales differ —
-   the orchestrator normalizes when judging.
+   optional (dismissal recorded). Reviewers' severity scales differ, so the
+   orchestrator normalizes by this rule: **any reviewer-flagged bug or security
+   issue is blocking regardless of its label**, and for graded findings,
+   Gitar/Claude "high/medium" and CodeRabbit's non-nit findings map to "Medium+".
+   Pure style/nit/typo findings are non-blocking.
 4. **Auto-merge safety** — autonomous merge into `main`; for 2a it is one
    fully-reviewed-and-resolved, green PR, merged via `gh` (observable). 2b will
    serialize merges.
