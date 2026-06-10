@@ -1,28 +1,36 @@
 {
-  "name": "acdc-poc-notes-api",
+  "name": "acdc-poc",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/src/server.js",
-    "dev": "tsx src/server.ts",
-    "test": "vitest run",
-    "test:cov": "vitest run --coverage",
-    "test:watch": "vitest"
+  "engines": {
+    "node": ">=22"
   },
-  "dependencies": {
-    "express": "^4.19.2"
+  "workspaces": [
+    "server",
+    "web",
+    "e2e"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace web",
+    "build": "npm run build --workspace web && npm run build --workspace server",
+    "test": "npm run test --workspace server && npm run test --workspace web",
+    "test:cov": "npm run test:cov --workspace server && npm run test:cov --workspace web",
+    "test:e2e": "npm run test --workspace e2e",
+    "start:prod": "npm run build && npm run start --workspace server",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write ."
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^22.5.0",
-    "@types/supertest": "^6.0.2",
-    "@vitest/coverage-v8": "^2.0.0",
-    "supertest": "^7.0.0",
-    "tsx": "^4.16.0",
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "globals": "^15.0.0",
+    "prettier": "^3.3.0",
     "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "typescript-eslint": "^8.0.0"
   }
 }

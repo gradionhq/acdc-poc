@@ -8,6 +8,7 @@ description: Run SonarQube analysis on your changed files via the MCP server and
 Use the SonarQube MCP server to verify your own changes before review.
 
 ## Steps
+
 1. Determine the files YOU changed in this branch. Diff against the ref you
    branched from — the run's start tag, not `main` (Task A branches from
    `baseline`, Task B from `task-b-bugged`):

@@ -5,19 +5,47 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   build-test-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+        with: { node-version: 22, cache: npm }
       - run: npm ci
-      - run: npm run test:cov
+      - run: npm run lint
+      - run: npm run test:cov --workspace server
+      - run: npm run test:cov --workspace web
+      - run: npm run build
+      - name: Install Playwright browser
+        run: npm exec --workspace e2e -- playwright install --with-deps chromium
+      - name: Run e2e
+        run: npm run test:e2e
+      - name: Upload e2e artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14
+      - name: Comment proof-of-work link on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `🎥 **Proof-of-work**: Playwright report + video artifact for this run → ${run} (see the \`playwright-report\` artifact).`,
+            });
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v4
         env:

@@ -1,0 +1,48 @@
+name: Agent task
+description: A fully-specified task an autonomous agent can implement unsupervised.
+labels: ['agent-ready']
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Background and the user-facing goal.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable checklist of done.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope boundaries
+      description: What must NOT change.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - web
+        - server
+        - e2e
+        - multiple
+    validations:
+      required: true
+  - type: checkboxes
+    id: proof
+    attributes:
+      label: Proof of work
+      description: >-
+        A Playwright e2e covering this feature must pass, with its recorded
+        video linked from the PR.
+      options:
+        - label: >-
+            I confirm a passing Playwright e2e + recorded video will be linked
+            on the PR.
+          required: true

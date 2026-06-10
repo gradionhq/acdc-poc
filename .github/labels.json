@@ -1,0 +1,23 @@
+[
+  {
+    "name": "agent-ready",
+    "color": "0e8a16",
+    "description": "Fully specified; an agent may take it unsupervised"
+  },
+  { "name": "needs-human", "color": "d93f0b", "description": "Requires a human decision or input" },
+  {
+    "name": "blocked",
+    "color": "b60205",
+    "description": "Blocked by another issue or external dependency"
+  },
+  { "name": "type:feature", "color": "1d76db", "description": "New functionality" },
+  { "name": "type:bug", "color": "d73a4a", "description": "Something isn't working" },
+  { "name": "type:chore", "color": "c5def5", "description": "Tooling, deps, or maintenance" },
+  { "name": "type:docs", "color": "0075ca", "description": "Documentation only" },
+  { "name": "area:web", "color": "5319e7", "description": "React + Vite frontend" },
+  { "name": "area:server", "color": "006b75", "description": "Express API backend" },
+  { "name": "area:e2e", "color": "fbca04", "description": "Playwright end-to-end tests" },
+  { "name": "priority:high", "color": "b60205", "description": "High priority" },
+  { "name": "priority:med", "color": "fbca04", "description": "Medium priority" },
+  { "name": "priority:low", "color": "0e8a16", "description": "Low priority" }
+]
