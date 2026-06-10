@@ -76,11 +76,15 @@ You are in a dedicated git worktree at <WORKTREE_PATH>, on branch
 ## Steps
 1. `gh issue view <N>` — read the issue's acceptance criteria + scope.
 2. Read `CLAUDE.md` for project conventions and the security/quality bar.
-3. `npm ci` in the worktree (worktrees don't share node_modules).
+3. `npm ci` in the worktree (worktrees don't share node_modules), then
+   `npm exec --workspace e2e -- playwright install chromium` (the browser may not
+   be cached in this worktree/machine).
 4. Implement the feature within the stated scope. Follow CLAUDE.md.
 5. Add a Playwright e2e under `e2e/tests/` covering the feature (the config already
    records video — a passing e2e produces the proof-of-work artifact in CI).
-6. Run the local green bar: `npm run lint`, `npm test`, `npm run test:e2e`.
+6. Run the local green bar — **mirror exactly what CI gates on**, so a local pass
+   predicts a CI pass:
+   `npm run lint && npm run build && npm run test:cov --workspace server && npm run test:cov --workspace web && npm run test:e2e`.
 7. Commit with Conventional Commits; `git push -u origin run/issue-<N>`.
 8. Open a PR to `main` that closes the issue: `gh pr create --base main --title "..." --body "Closes #<N> ..."`.
 9. Report the PR number/URL and a summary of what you built + the green-bar results.
@@ -106,7 +110,9 @@ The git worktree at <WORKTREE_PATH>, branch `run/issue-<N>`. `git pull` first.
    in code. If it is a pure nit/style/false-positive, do NOT change code — instead
    note a one-line dismissal rationale in your report.
 2. Keep changes minimal and within the PR's scope.
-3. Re-run the local green bar (`npm run lint`, `npm test`, `npm run test:e2e`).
+3. Re-run the same local green bar CI gates on:
+   `npm run lint && npm run build && npm run test:cov --workspace server && npm run test:cov --workspace web && npm run test:e2e`
+   (run `npm exec --workspace e2e -- playwright install chromium` first if the browser isn't present).
 4. Commit (Conventional Commits) and push.
 5. Report: which findings you fixed (with the commit), which you dismissed (with
    rationale), and the green-bar results.
@@ -175,11 +181,20 @@ gh api repos/gradionai/acdc-poc/installation 2>/dev/null >/dev/null  # app acces
 ```
 If CodeRabbit is not installed, STOP and ask the operator to install it (only 2 of 3 reviewers would fire otherwise).
 
-- [ ] **Step 2: Confirm main is green + clean**
+- [ ] **Step 2: Confirm main is green + clean** (check the CI workflow's latest *completed* run, not just any run)
 ```bash
 git checkout main && git pull
-gh run list --repo gradionai/acdc-poc --branch main --limit 1 --json conclusion --jq '.[].conclusion'  # expect success
+gh run list --repo gradionai/acdc-poc --branch main --workflow CI --status completed --limit 1 \
+  --json conclusion,headSha --jq '.[] | "\(.conclusion) @ \(.headSha[0:7])"'  # expect: success @ <tip sha>
+git rev-parse --short HEAD   # confirm the sha above matches main's tip
 ```
+
+- [ ] **Step 3: Pin the three reviewer identifiers** (so "all reviews in?" is deterministic). From a recent PR (e.g. the Phase-1 PR #9), record how each reviewer appears so the poll can match them exactly:
+```bash
+gh api repos/gradionai/acdc-poc/issues/9/comments --jq '.[].user.login' | sort -u
+gh pr checks 9 --repo gradionai/acdc-poc
+```
+Expected from Phase 1: `gitar-bot[bot]` (issue comment + check "Gitar"), `sonarqubecloud[bot]`, and CodeRabbit/Claude once they're on a PR. Record the exact logins/check-names for Gitar, CodeRabbit, and Claude Code review; the poll in Task 2.3 keys off these. If CodeRabbit/Claude haven't appeared on any PR yet, note that the #21 PR will be their first.
 
 ### Task 2.2: Implement (worktree subagent)
 
@@ -200,14 +215,20 @@ Expected report: PR number/URL, green-bar pass, summary.
 
 ### Task 2.3: Review (bake-off) — poll until all three post
 
-- [ ] **Step 1: Poll for the three reviewers** (background loop, bounded ~10 min)
+- [ ] **Step 1: Poll for the three reviewers** — run a **background** bounded loop (NOT a foreground sleep), 30s interval, ~10 min cap, keyed off the identifiers pinned in Task 2.1 Step 3:
 ```bash
-# Wait until Gitar, CodeRabbit, and Claude have each commented/reviewed on $PR,
-# or the timeout elapses; then dump their findings.
-gh api repos/gradionai/acdc-poc/issues/$PR/comments --jq '.[].user.login' 
-gh api repos/gradionai/acdc-poc/pulls/$PR/reviews --jq '.[].user.login'
+for i in $(seq 1 20); do
+  logins=$( { gh api repos/gradionai/acdc-poc/issues/$PR/comments --jq '.[].user.login';
+              gh api repos/gradionai/acdc-poc/pulls/$PR/reviews  --jq '.[].user.login'; } | sort -u )
+  have_gitar=$(echo "$logins" | grep -qi gitar && echo 1 || echo 0)
+  have_rabbit=$(echo "$logins" | grep -qi coderabbit && echo 1 || echo 0)
+  have_claude=$(echo "$logins" | grep -qiE 'claude' && echo 1 || echo 0)
+  echo "iter $i: gitar=$have_gitar rabbit=$have_rabbit claude=$have_claude"
+  [ "$have_gitar$have_rabbit$have_claude" = "111" ] && { echo "all three in"; break; }
+  sleep 30
+done
 ```
-Expected: comments/reviews from `gitar-bot`, the CodeRabbit bot, and the Claude review bot. If one is silent past the timeout, proceed and record it as "no review in time".
+Run via `run_in_background`. If one reviewer is still silent at the cap, proceed and record it as "no review in time" in the scorecard. (Claude Code review may post as a PR *review* or a *check* rather than an issue comment — match against both reviews and check-runs per the Task 2.1 pinning.)
 
 - [ ] **Step 2: Capture all findings verbatim** (issue comments + PR reviews + inline review comments) for the scorecard and the resolver input.
 
@@ -224,8 +245,12 @@ gh pr checks $PR --repo gradionai/acdc-poc
 Expected: lint/tests/e2e/SonarCloud re-run on the pushed fixes.
 
 - [ ] **Step 3: Evaluate the gate**
-Gate met when: CI + SonarCloud all pass AND no unresolved **blocking** finding
-(bug/security/Medium+) remains (per the spec's normalization rule). If not met and
+Read all checks: `gh pr checks $PR --repo gradionai/acdc-poc`. SonarCloud's quality
+gate surfaces as the **"SonarCloud Code Analysis"** check (confirmed in Phase 1 — it
+showed `fail` when new-code coverage dropped, `pass` when restored), and the
+pipeline check is **build-test-scan**; both plus **lint** must be `pass`.
+Gate met when: **all those checks pass AND no unresolved blocking finding**
+(bug/security/Medium+, per the spec's normalization rule) remains. If not met and
 iterations < 3, re-capture findings and repeat Task 2.4 Step 1. If still not met
 after 3, STOP and record the remaining findings in the scorecard (do not merge).
 
@@ -243,8 +268,8 @@ Expected: PR merged; issue #21 closed; board moves it to Done.
 
 - [ ] **Step 2: Remove the worktree**
 ```bash
-git worktree remove /Users/dung.nguyen/Projects/gradion/acdc-poc-wt/issue-21
-git branch -d run/issue-21 2>/dev/null || true
+git worktree remove --force /Users/dung.nguyen/Projects/gradion/acdc-poc-wt/issue-21
+git branch -D run/issue-21 2>/dev/null || true   # branch is merged via the PR
 ```
 
 ---
