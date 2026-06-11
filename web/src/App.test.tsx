@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
@@ -722,5 +722,112 @@ describe('listNotes — X-Total-Count validation', () => {
     );
     const result = await listNotes(1, 5);
     expect(result.total).toBe(42);
+  });
+});
+
+describe('App — dark mode toggle', () => {
+  beforeEach(() => {
+    mockFetchSequence();
+    localStorage.removeItem('theme');
+    // Default: no OS dark preference
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    // Reset data-theme to avoid bleed between tests
+    document.documentElement.removeAttribute('data-theme');
+  });
+
+  afterEach(() => {
+    localStorage.removeItem('theme');
+    document.documentElement.removeAttribute('data-theme');
+    vi.unstubAllGlobals();
+  });
+
+  it('defaults to light theme when no stored preference and no OS dark preference', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument(),
+    );
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('defaults to dark theme when OS prefers dark and no stored preference', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query === '(prefers-color-scheme: dark)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument(),
+    );
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('uses stored light preference over OS dark preference', async () => {
+    localStorage.setItem('theme', 'light');
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query === '(prefers-color-scheme: dark)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument(),
+    );
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('toggle button switches from light to dark and persists to localStorage', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument(),
+    );
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+    await userEvent.click(screen.getByRole('button', { name: /switch to dark mode/i }));
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(localStorage.getItem('theme')).toBe('dark');
+  });
+
+  it('toggle button switches from dark to light and persists to localStorage', async () => {
+    localStorage.setItem('theme', 'dark');
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument(),
+    );
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+
+    await userEvent.click(screen.getByRole('button', { name: /switch to light mode/i }));
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    expect(localStorage.getItem('theme')).toBe('light');
   });
 });

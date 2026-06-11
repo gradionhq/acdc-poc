@@ -12,6 +12,7 @@ import {
   type Note,
 } from './api';
 import { Button } from './components/Button';
+import { useTheme } from './useTheme';
 import styles from './App.module.css';
 
 const PAGE_SIZE = 5;
@@ -30,6 +31,7 @@ function parseTags(raw: string): string[] {
 }
 
 export function App() {
+  const { theme, toggleTheme } = useTheme();
   const [notes, setNotes] = useState<Note[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -230,7 +232,16 @@ export function App() {
 
   return (
     <main className={styles.page}>
-      <h1 className={styles.pageTitle}>Notes</h1>
+      <header className={styles.pageHeader}>
+        <h1 className={styles.pageTitle}>Notes</h1>
+        <button
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="theme-toggle"
+          onClick={toggleTheme}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+      </header>
       {error && (
         <p role="alert" className={styles.alert}>
           {error}
