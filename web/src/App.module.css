@@ -213,6 +213,78 @@
   color: var(--color-text-muted);
 }
 
+/* ── Color picker (swatches) ─────────────────────────────────── */
+
+.colorPicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.colorSwatch {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.colorSwatch:hover {
+  transform: scale(1.15);
+}
+
+.colorSwatchSelected {
+  border-color: var(--color-text);
+  transform: scale(1.1);
+}
+
+/* Individual swatch colors */
+.swatch-none {
+  background-color: var(--color-surface-border);
+}
+.swatch-red {
+  background-color: #ef4444;
+}
+.swatch-yellow {
+  background-color: #eab308;
+}
+.swatch-green {
+  background-color: #22c55e;
+}
+.swatch-blue {
+  background-color: #3b82f6;
+}
+.swatch-purple {
+  background-color: #a855f7;
+}
+
+/* ── Note card color accents ────────────────────────────────── */
+
+.card-red {
+  border-left: 4px solid #ef4444;
+  background-color: #fef2f2;
+}
+.card-yellow {
+  border-left: 4px solid #eab308;
+  background-color: #fefce8;
+}
+.card-green {
+  border-left: 4px solid #22c55e;
+  background-color: #f0fdf4;
+}
+.card-blue {
+  border-left: 4px solid #3b82f6;
+  background-color: #eff6ff;
+}
+.card-purple {
+  border-left: 4px solid #a855f7;
+  background-color: #faf5ff;
+}
+
 /* ── Pagination ──────────────────────────────────────────────── */
 
 .pagination {

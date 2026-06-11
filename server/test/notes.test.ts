@@ -295,6 +295,71 @@ describe('notes API', () => {
     expect(res.body).toEqual({ error: 'not found' });
   });
 
+  it('creates a note with a valid color and returns it', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', color: 'red' })
+      .expect(201);
+    expect(res.body.color).toBe('red');
+  });
+
+  it('defaults color to "none" when color is omitted on create', async () => {
+    const app = createApp();
+    const res = await request(app).post('/api/notes').send({ title: 't', body: 'b' }).expect(201);
+    expect(res.body.color).toBe('none');
+  });
+
+  it('rejects create with an invalid color value (400)', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', color: 'magenta' })
+      .expect(400);
+    expect(res.body).toEqual({
+      error: 'color must be one of: none, red, yellow, green, blue, purple',
+    });
+  });
+
+  it('rejects create with a non-string color value (400)', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', color: 42 })
+      .expect(400);
+    expect(res.body).toEqual({
+      error: 'color must be one of: none, red, yellow, green, blue, purple',
+    });
+  });
+
+  it('updates color via PUT and persists it', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b' })
+      .expect(201);
+    const updated = await request(app)
+      .put(`/api/notes/${created.body.id}`)
+      .send({ color: 'blue' })
+      .expect(200);
+    expect(updated.body.color).toBe('blue');
+  });
+
+  it('rejects PUT with an invalid color value (400)', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b' })
+      .expect(201);
+    const res = await request(app)
+      .put(`/api/notes/${created.body.id}`)
+      .send({ color: 'orange' })
+      .expect(400);
+    expect(res.body).toEqual({
+      error: 'color must be one of: none, red, yellow, green, blue, purple',
+    });
+  });
+
   it('pinned note appears first in list response', async () => {
     const app = createApp();
     await request(app).post('/api/notes').send({ title: 'first', body: 'b' }).expect(201);

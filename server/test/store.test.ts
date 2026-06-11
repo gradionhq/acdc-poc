@@ -167,6 +167,33 @@ describe('NoteStore', () => {
     expect(result.items[0].title).toBe('match title');
     expect(result.items[0].tags).toContain('work');
   });
+
+  it('creates a note with a valid color and persists it', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b', color: 'red' });
+    expect(n.color).toBe('red');
+    expect(store.get(n.id)?.color).toBe('red');
+  });
+
+  it('defaults color to "none" when omitted on create', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    expect(n.color).toBe('none');
+  });
+
+  it('updates color via update()', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b', color: 'blue' });
+    const updated = store.update(n.id, { color: 'green' });
+    expect(updated?.color).toBe('green');
+  });
+
+  it('preserves existing color when update() does not specify color', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b', color: 'yellow' });
+    const updated = store.update(n.id, { title: 'new title' });
+    expect(updated?.color).toBe('yellow');
+  });
 });
 
 describe('NoteStore — reset()', () => {

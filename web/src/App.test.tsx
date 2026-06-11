@@ -2,9 +2,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
-import { listNotes } from './api';
+import { listNotes, type NoteColor } from './api';
 
-type MockNote = { id: string; title: string; body: string; tags: string[]; pinned: boolean };
+type MockNote = {
+  id: string;
+  title: string;
+  body: string;
+  tags: string[];
+  pinned: boolean;
+  color: NoteColor;
+};
 
 function buildResponse(notes: MockNote[], page = 1, pageSize = 5) {
   const start = (page - 1) * pageSize;
@@ -83,6 +90,7 @@ function mockFetchSequence() {
           title: string;
           body: string;
           tags?: string[];
+          color?: NoteColor;
         };
         const n: MockNote = {
           id: String(++seq),
@@ -90,6 +98,7 @@ function mockFetchSequence() {
           body: b.body,
           tags: b.tags ?? [],
           pinned: false,
+          color: b.color ?? 'none',
         };
         notes.push(n);
         return new Response(JSON.stringify(n), { status: 201 });
@@ -100,6 +109,7 @@ function mockFetchSequence() {
           title?: string;
           body?: string;
           tags?: string[];
+          color?: NoteColor;
         };
         notes = notes.map((n) =>
           n.id === id
@@ -108,6 +118,7 @@ function mockFetchSequence() {
                 ...(b.title !== undefined ? { title: b.title } : {}),
                 ...(b.body !== undefined ? { body: b.body } : {}),
                 ...(b.tags !== undefined ? { tags: b.tags } : {}),
+                ...(b.color !== undefined ? { color: b.color } : {}),
               }
             : n,
         );
@@ -223,14 +234,21 @@ describe('App', () => {
 
   it('disables Previous on page 1 and enables Next when there are multiple pages', async () => {
     // Pre-populate with 6 notes via mock so total > pageSize (5)
-    let notes: Array<{ id: string; title: string; body: string; tags: string[]; pinned: boolean }> =
-      Array.from({ length: 6 }, (_, i) => ({
-        id: String(i + 1),
-        title: `Note ${i + 1}`,
-        body: `Body ${i + 1}`,
-        tags: [],
-        pinned: false,
-      }));
+    let notes: Array<{
+      id: string;
+      title: string;
+      body: string;
+      tags: string[];
+      pinned: boolean;
+      color: NoteColor;
+    }> = Array.from({ length: 6 }, (_, i) => ({
+      id: String(i + 1),
+      title: `Note ${i + 1}`,
+      body: `Body ${i + 1}`,
+      tags: [],
+      pinned: false,
+      color: 'none' as NoteColor,
+    }));
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
@@ -267,6 +285,7 @@ describe('App', () => {
       body: `body ${i + 1}`,
       tags: [] as string[],
       pinned: false,
+      color: 'none' as NoteColor,
     }));
     const notes = [...initialNotes];
     let nextId = initialNotes.length + 1;
@@ -278,6 +297,7 @@ describe('App', () => {
             title: string;
             body: string;
             tags?: string[];
+            color?: NoteColor;
           };
           const n = {
             id: String(nextId++),
@@ -285,6 +305,7 @@ describe('App', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
           return new Response(JSON.stringify(n), { status: 201 });
@@ -317,6 +338,7 @@ describe('App', () => {
       body: `Body ${i + 1}`,
       tags: [] as string[],
       pinned: false,
+      color: 'none' as NoteColor,
     }));
     vi.stubGlobal(
       'fetch',
@@ -557,6 +579,7 @@ describe('App — pin', () => {
       body: `body ${i + 1}`,
       tags: [] as string[],
       pinned: false,
+      color: 'none' as NoteColor,
     }));
     const notes = initialNotes.map((n) => ({ ...n }));
     vi.stubGlobal(
@@ -829,5 +852,74 @@ describe('App — dark mode toggle', () => {
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     expect(localStorage.getItem('theme')).toBe('light');
+  });
+});
+
+describe('App — color labels', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('renders color swatch buttons in the new-note form', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument(),
+    );
+    // Each color in the palette should have a swatch button
+    for (const c of ['none', 'red', 'yellow', 'green', 'blue', 'purple']) {
+      expect(screen.getByRole('button', { name: `Color ${c}` })).toBeInTheDocument();
+    }
+  });
+
+  it('creates a note with a selected color and renders a data-color attribute on the card', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Red note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    // Select the "red" swatch
+    await userEvent.click(screen.getByRole('button', { name: 'Color red' }));
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    await waitFor(() => expect(screen.getByText('Red note')).toBeInTheDocument());
+
+    // The list item should carry data-color="red"
+    const li = screen.getByText('Red note').closest('li');
+    expect(li).toHaveAttribute('data-color', 'red');
+  });
+
+  it('note with no color shows data-color="none"', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Plain note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    await waitFor(() => expect(screen.getByText('Plain note')).toBeInTheDocument());
+
+    const li = screen.getByText('Plain note').closest('li');
+    expect(li).toHaveAttribute('data-color', 'none');
+  });
+
+  it('edit form shows color swatches and updating color changes data-color on card', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Color edit note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    await waitFor(() => expect(screen.getByText('Color edit note')).toBeInTheDocument());
+
+    // Open edit form
+    await userEvent.click(screen.getByRole('button', { name: /^edit color edit note$/i }));
+
+    // Edit form should show color swatches — scope to the edit-color group
+    const editColorGroup = screen.getByRole('group', { name: /edit color/i });
+    expect(editColorGroup).toBeInTheDocument();
+
+    // Select green — scoped within the edit-color group to avoid collision with the
+    // create-form swatch of the same name
+    const greenSwatchInEdit = editColorGroup.querySelector('button[aria-label="Color green"]');
+    expect(greenSwatchInEdit).not.toBeNull();
+    await userEvent.click(greenSwatchInEdit!);
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(screen.getByText('Color edit note')).toBeInTheDocument());
+    const li = screen.getByText('Color edit note').closest('li');
+    expect(li).toHaveAttribute('data-color', 'green');
   });
 });

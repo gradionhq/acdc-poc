@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
-import { NoteStore } from './store.js';
+import { NOTE_COLORS, NoteStore, type NoteColor } from './store.js';
 
 /**
  * Encode a filename for use in a Content-Disposition header following
@@ -68,6 +68,20 @@ function parseTags(value: unknown): string[] | null {
   return [...new Set(normalized)];
 }
 
+const COLOR_ERROR = `color must be one of: ${NOTE_COLORS.join(', ')}`;
+
+/**
+ * Validate a color field from client input.
+ * Returns the parsed NoteColor on success, or null when the value is invalid.
+ * Returns undefined when the field is absent (caller treats as "use default").
+ */
+function parseColor(value: unknown): NoteColor | null | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') return null;
+  if ((NOTE_COLORS as readonly string[]).includes(value)) return value as NoteColor;
+  return null;
+}
+
 export function createNotesRouter(store: NoteStore): Router {
   const router = Router();
 
@@ -82,10 +96,11 @@ export function createNotesRouter(store: NoteStore): Router {
   });
 
   router.post('/', (req: Request, res: Response) => {
-    const { title, body, tags } = (req.body ?? {}) as {
+    const { title, body, tags, color } = (req.body ?? {}) as {
       title?: unknown;
       body?: unknown;
       tags?: unknown;
+      color?: unknown;
     };
     if (typeof title !== 'string' || typeof body !== 'string') {
       res.status(400).json({ error: 'title and body must be strings' });
@@ -96,7 +111,19 @@ export function createNotesRouter(store: NoteStore): Router {
       res.status(400).json({ error: 'tags must be an array of non-empty strings' });
       return;
     }
-    res.status(201).json(store.create({ title, body, tags: parsedTags }));
+    const parsedColor = parseColor(color);
+    if (parsedColor === null) {
+      res.status(400).json({ error: COLOR_ERROR });
+      return;
+    }
+    res.status(201).json(
+      store.create({
+        title,
+        body,
+        tags: parsedTags,
+        ...(parsedColor !== undefined ? { color: parsedColor } : {}),
+      }),
+    );
   });
 
   router.get('/:id', (req: Request, res: Response) => {
@@ -114,8 +141,13 @@ export function createNotesRouter(store: NoteStore): Router {
       res.status(400).json({ error: 'payload must be an object' });
       return;
     }
-    const { title, body, tags } = payload as { title?: unknown; body?: unknown; tags?: unknown };
-    if (title === undefined && body === undefined && tags === undefined) {
+    const { title, body, tags, color } = payload as {
+      title?: unknown;
+      body?: unknown;
+      tags?: unknown;
+      color?: unknown;
+    };
+    if (title === undefined && body === undefined && tags === undefined && color === undefined) {
       res.status(400).json({ error: 'at least one of title, body, or tags is required' });
       return;
     }
@@ -127,13 +159,23 @@ export function createNotesRouter(store: NoteStore): Router {
       res.status(400).json({ error: 'body must be a string' });
       return;
     }
+    const parsedColor = parseColor(color);
+    if (parsedColor === null) {
+      res.status(400).json({ error: COLOR_ERROR });
+      return;
+    }
     if (tags !== undefined) {
       const parsedTags = parseTags(tags);
       if (parsedTags === null) {
         res.status(400).json({ error: 'tags must be an array of non-empty strings' });
         return;
       }
-      const note = store.update(req.params.id, { title, body, tags: parsedTags });
+      const note = store.update(req.params.id, {
+        title,
+        body,
+        tags: parsedTags,
+        ...(parsedColor !== undefined ? { color: parsedColor } : {}),
+      });
       if (!note) {
         res.status(404).json({ error: 'not found' });
         return;
@@ -141,7 +183,11 @@ export function createNotesRouter(store: NoteStore): Router {
       res.json(note);
       return;
     }
-    const note = store.update(req.params.id, { title, body });
+    const note = store.update(req.params.id, {
+      title,
+      body,
+      ...(parsedColor !== undefined ? { color: parsedColor } : {}),
+    });
     if (!note) {
       res.status(404).json({ error: 'not found' });
       return;

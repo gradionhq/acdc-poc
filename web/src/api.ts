@@ -1,9 +1,17 @@
+export const NOTE_COLORS = ['none', 'red', 'yellow', 'green', 'blue', 'purple'] as const;
+export type NoteColor = (typeof NOTE_COLORS)[number];
+
 export interface Note {
   id: string;
   title: string;
   body: string;
   tags: string[];
   pinned: boolean;
+  color: NoteColor;
+}
+
+function isNoteColor(value: unknown): value is NoteColor {
+  return typeof value === 'string' && (NOTE_COLORS as readonly string[]).includes(value);
 }
 
 function isNote(value: unknown): value is Note {
@@ -15,7 +23,8 @@ function isNote(value: unknown): value is Note {
     typeof v.body === 'string' &&
     Array.isArray(v.tags) &&
     (v.tags as unknown[]).every((t) => typeof t === 'string') &&
-    typeof v.pinned === 'boolean'
+    typeof v.pinned === 'boolean' &&
+    isNoteColor(v.color)
   );
 }
 
@@ -54,6 +63,7 @@ export async function createNote(input: {
   title: string;
   body: string;
   tags?: string[];
+  color?: NoteColor;
 }): Promise<Note> {
   const res = await fetch(base, {
     method: 'POST',
@@ -68,7 +78,7 @@ export async function createNote(input: {
 
 export async function updateNote(
   id: string,
-  input: { title?: string; body?: string; tags?: string[] },
+  input: { title?: string; body?: string; tags?: string[]; color?: NoteColor },
 ): Promise<Note> {
   const res = await fetch(`${base}/${id}`, {
     method: 'PUT',
