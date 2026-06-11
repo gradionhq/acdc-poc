@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 
 // Creates a note via the UI and waits for the form title input to clear,
 // confirming the server accepted the note before the test proceeds.

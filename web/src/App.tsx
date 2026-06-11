@@ -11,8 +11,9 @@ import {
   type AttachmentMeta,
   type Note,
 } from './api';
+import { Button } from './components/Button';
 import { useTheme } from './useTheme';
-import './theme.css';
+import styles from './App.module.css';
 
 const PAGE_SIZE = 5;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -230,9 +231,9 @@ export function App() {
   }
 
   return (
-    <main>
-      <header>
-        <h1>Notes</h1>
+    <main className={styles.page}>
+      <header className={styles.pageHeader}>
+        <h1 className={styles.pageTitle}>Notes</h1>
         <button
           aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           className="theme-toggle"
@@ -241,115 +242,182 @@ export function App() {
           {theme === 'dark' ? '☀️' : '🌙'}
         </button>
       </header>
-      {error && <p role="alert">{error}</p>}
-      <label>
-        Search
-        <input
-          aria-label="Search notes"
-          placeholder="Search notes…"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
-      </label>
-      <label>
-        Filter by tag
-        <input
-          aria-label="Filter by tag"
-          placeholder="Filter by tag…"
-          value={tagFilter}
-          onChange={(e) => {
-            setPage(1);
-            setTagFilter(e.target.value);
-          }}
-        />
-      </label>
-      <form onSubmit={onSubmit}>
-        <label>
-          Title
-          <input value={title} onChange={(e) => setTitle(e.target.value)} />
-        </label>
-        <label>
-          Body
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} />
-        </label>
-        <label>
-          Tags
+      {error && (
+        <p role="alert" className={styles.alert}>
+          {error}
+        </p>
+      )}
+
+      {/* Search / filter bar */}
+      <div className={styles.filterBar}>
+        <label className={styles.fieldLabel}>
+          Search
           <input
-            aria-label="Tags"
-            placeholder="comma-separated tags"
-            value={tagsInput}
-            onChange={(e) => setTagsInput(e.target.value)}
+            className={styles.input}
+            aria-label="Search notes"
+            placeholder="Search notes…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
         </label>
-        <button type="submit">Add note</button>
+        <label className={styles.fieldLabel}>
+          Filter by tag
+          <input
+            className={styles.input}
+            aria-label="Filter by tag"
+            placeholder="Filter by tag…"
+            value={tagFilter}
+            onChange={(e) => {
+              setPage(1);
+              setTagFilter(e.target.value);
+            }}
+          />
+        </label>
+      </div>
+
+      {/* Create-note form */}
+      <form onSubmit={onSubmit} className={styles.form}>
+        <div className={`${styles.card} ${styles.fieldGroup}`}>
+          <h2 className={styles.formTitle}>New note</h2>
+          <label className={styles.fieldLabel}>
+            Title
+            <input
+              className={styles.input}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </label>
+          <label className={styles.fieldLabel}>
+            Body
+            <textarea
+              className={styles.textarea}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+          </label>
+          <label className={styles.fieldLabel}>
+            Tags
+            <input
+              className={styles.input}
+              aria-label="Tags"
+              placeholder="comma-separated tags"
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+            />
+          </label>
+          <div className={styles.formActions}>
+            <Button type="submit" variant="primary">
+              Add note
+            </Button>
+          </div>
+        </div>
       </form>
-      <ul>
+
+      {/* Note list */}
+      <ul className={styles.noteList}>
         {notes.map((n) =>
           editingId === n.id ? (
-            <li key={n.id}>
-              <label>
-                Edit title
-                <input
-                  aria-label="Edit title"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                />
-              </label>
-              <label>
-                Edit body
-                <textarea
-                  aria-label="Edit body"
-                  value={editBody}
-                  onChange={(e) => setEditBody(e.target.value)}
-                />
-              </label>
-              <label>
-                Edit tags
-                <input
-                  aria-label="Edit tags"
-                  placeholder="comma-separated tags"
-                  value={editTagsInput}
-                  onChange={(e) => setEditTagsInput(e.target.value)}
-                />
-              </label>
-              <button onClick={() => void onEditSave(n.id)}>Save</button>
-              <button onClick={onEditCancel}>Cancel</button>
+            <li key={n.id} className={styles.noteCard}>
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel}>
+                  Edit title
+                  <input
+                    className={styles.input}
+                    aria-label="Edit title"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                  />
+                </label>
+                <label className={styles.fieldLabel}>
+                  Edit body
+                  <textarea
+                    className={styles.textarea}
+                    aria-label="Edit body"
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                  />
+                </label>
+                <label className={styles.fieldLabel}>
+                  Edit tags
+                  <input
+                    className={styles.input}
+                    aria-label="Edit tags"
+                    placeholder="comma-separated tags"
+                    value={editTagsInput}
+                    onChange={(e) => setEditTagsInput(e.target.value)}
+                  />
+                </label>
+                <div className={styles.noteActions}>
+                  <Button variant="primary" onClick={() => void onEditSave(n.id)}>
+                    Save
+                  </Button>
+                  <Button variant="secondary" onClick={onEditCancel}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             </li>
           ) : (
-            <li key={n.id}>
-              <strong>{n.title}</strong>: {n.body}
-              {n.pinned && <span aria-label="Pinned">📌</span>}
+            <li key={n.id} className={styles.noteCard}>
+              <div className={styles.noteHeader}>
+                <span className={styles.noteTitle}>{n.title}</span>
+                {n.pinned && (
+                  <span aria-label="Pinned" className={styles.pinnedBadge}>
+                    📌
+                  </span>
+                )}
+              </div>
+              <p className={styles.noteBody}>{n.body}</p>
               {n.tags.length > 0 && (
-                <span aria-label="Tags">
+                <div className={styles.tagList} aria-label="Tags">
                   {n.tags.map((tag) => (
-                    <span key={tag} data-tag={tag}>
+                    <span key={tag} data-tag={tag} className={styles.tag}>
                       {tag}
                     </span>
                   ))}
-                </span>
+                </div>
               )}
-              <button
-                aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
-                onClick={() => void onTogglePin(n.id, n.pinned)}
-              >
-                {n.pinned ? 'Unpin' : 'Pin'}
-              </button>
-              <button aria-label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
-                Edit
-              </button>
-              <button aria-label={`Delete ${n.title}`} onClick={() => void onDelete(n.id)}>
-                Delete
-              </button>
-              <button
-                aria-label={`Attachments for ${n.title}`}
-                onClick={() => void onToggleAttachments(n.id)}
-              >
-                {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
-              </button>
+              <div className={styles.noteActions}>
+                <Button
+                  variant="secondary"
+                  aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
+                  onClick={() => void onTogglePin(n.id, n.pinned)}
+                >
+                  {n.pinned ? 'Unpin' : 'Pin'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  aria-label={`Edit ${n.title}`}
+                  onClick={() => onEditStart(n)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="danger"
+                  aria-label={`Delete ${n.title}`}
+                  onClick={() => void onDelete(n.id)}
+                >
+                  Delete
+                </Button>
+                <Button
+                  variant="secondary"
+                  aria-label={`Attachments for ${n.title}`}
+                  onClick={() => void onToggleAttachments(n.id)}
+                >
+                  {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
+                </Button>
+              </div>
               {attachmentsOpen[n.id] && (
-                <div aria-label={`Attachments panel for ${n.title}`}>
-                  {uploadError[n.id] && <p role="alert">{uploadError[n.id]}</p>}
-                  <label>
+                <div
+                  className={styles.attachmentsPanel}
+                  aria-label={`Attachments panel for ${n.title}`}
+                >
+                  {uploadError[n.id] && (
+                    <p role="alert" className={styles.alert}>
+                      {uploadError[n.id]}
+                    </p>
+                  )}
+                  <label className={styles.attachmentUpload}>
                     Attach file
                     <input
                       type="file"
@@ -358,9 +426,12 @@ export function App() {
                     />
                   </label>
                   {(attachments[n.id] ?? []).length === 0 ? (
-                    <p>No attachments yet.</p>
+                    <p className={styles.attachmentEmpty}>No attachments yet.</p>
                   ) : (
-                    <ul aria-label={`Attachment list for ${n.title}`}>
+                    <ul
+                      className={styles.attachmentList}
+                      aria-label={`Attachment list for ${n.title}`}
+                    >
                       {(attachments[n.id] ?? []).map((att) => (
                         <li key={att.filename}>
                           <a
@@ -381,24 +452,28 @@ export function App() {
           ),
         )}
       </ul>
-      <nav aria-label="Pagination">
-        <button
+
+      {/* Pagination */}
+      <nav aria-label="Pagination" className={styles.pagination}>
+        <Button
+          variant="secondary"
           onClick={() => setPage((p) => p - 1)}
           disabled={page <= 1}
           aria-label="Previous page"
         >
           Previous
-        </button>
-        <span>
+        </Button>
+        <span className={styles.pageInfo}>
           Page {page} of {totalPages}
         </span>
-        <button
+        <Button
+          variant="secondary"
           onClick={() => setPage((p) => p + 1)}
           disabled={page >= totalPages}
           aria-label="Next page"
         >
           Next
-        </button>
+        </Button>
       </nav>
     </main>
   );

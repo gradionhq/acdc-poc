@@ -26,6 +26,9 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
+      ...process.env,
+      // Reset the in-memory store before every spec (see e2e/fixtures.ts).
+      ENABLE_TEST_RESET: '1',
       // Use a very high limit so the e2e suite (which makes many API calls
       // during pagination, search, and pin tests) is never throttled.
       // The rate-limiter logic is covered by server-side unit tests; e2e
