@@ -257,6 +257,79 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
   });
 
+  it('error banner shows a Retry button that re-fetches notes', async () => {
+    let callCount = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        callCount += 1;
+        // First call fails; subsequent calls succeed with an empty list
+        if (callCount === 1) {
+          return new Response('nope', { status: 500 });
+        }
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'X-Total-Count': '0' },
+        });
+      }),
+    );
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+    // After retry the error banner should disappear
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
+  it('shows a loading skeleton while fetching notes', async () => {
+    // Never resolves — keeps the app in loading state
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => {})),
+    );
+    render(<App />);
+    expect(screen.getByRole('list', { name: /loading notes/i })).toBeInTheDocument();
+  });
+
+  it('shows empty state when there are no notes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'X-Total-Count': '0' },
+          }),
+      ),
+    );
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(/no notes yet/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /add your first note/i })).toBeInTheDocument();
+  });
+
+  it('empty state does not show when notes exist', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Has notes');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body text');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Has notes')).toBeInTheDocument());
+    expect(screen.queryByText(/no notes yet/i)).not.toBeInTheDocument();
+  });
+
+  it('error message does not expose raw stack traces', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('nope', { status: 500 })),
+    );
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    const alertText = screen.getByRole('alert').textContent ?? '';
+    expect(alertText).not.toMatch(/Error:/);
+    expect(alertText).not.toMatch(/at \w/);
+    expect(alertText).not.toMatch(/\.tsx?:/);
+  });
+
   it('disables Previous on page 1 and enables Next when there are multiple pages', async () => {
     // Pre-populate with 6 notes via mock so total > pageSize (5)
     let notes: Array<{ id: string; title: string; body: string; tags: string[]; pinned: boolean }> =
@@ -427,6 +500,23 @@ describe('App', () => {
 
     await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'zzznomatch');
     await waitFor(() => expect(screen.queryByText('Unique note')).not.toBeInTheDocument());
+  });
+
+  it('shows "no notes match your search" when filter is active but no results match', async () => {
+    render(<App />);
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Filter test note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'some body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Filter test note')).toBeInTheDocument());
+
+    // Search for something that won't match — should show filter-specific message, not the CTA
+    await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'zzznomatch');
+    await waitFor(() =>
+      expect(screen.getByText(/no notes match your search/i)).toBeInTheDocument(),
+    );
+    // The "Add your first note" CTA must NOT appear when notes exist but filter has no results
+    expect(screen.queryByRole('button', { name: /add your first note/i })).not.toBeInTheDocument();
   });
 
   it('creating a note while a search is active clears the search and shows the new note', async () => {
