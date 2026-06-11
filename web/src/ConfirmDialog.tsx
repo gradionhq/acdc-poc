@@ -4,29 +4,33 @@ import styles from './ConfirmDialog.module.css';
 
 export interface ConfirmDialogProps {
   /** Dialog heading — shown prominently at the top. */
-  title: string;
+  readonly title: string;
   /** Descriptive message explaining what will happen. */
-  message: string;
+  readonly message: string;
   /** Label for the confirm (destructive) button. Defaults to "Confirm". */
-  confirmLabel?: string;
+  readonly confirmLabel?: string;
   /** Label for the cancel button. Defaults to "Cancel". */
-  cancelLabel?: string;
+  readonly cancelLabel?: string;
   /** Called when the user clicks the confirm button. */
-  onConfirm: () => void;
+  readonly onConfirm: () => void;
   /** Called when the user clicks cancel, presses Escape, or clicks the backdrop. */
-  onCancel: () => void;
+  readonly onCancel: () => void;
 }
 
 /**
  * Accessible in-app confirmation dialog, implementing the ARIA APG modal dialog pattern.
  *
+ * Uses the native `<dialog>` element so the browser supplies `role="dialog"`,
+ * `aria-modal`, and built-in Escape handling automatically.
+ *
  * Accessibility properties:
- * - `role="dialog"` + `aria-modal="true"` so screen readers treat it as a modal.
+ * - Native `<dialog>` element so screen readers treat it as a modal.
  * - `aria-labelledby` points at the visible heading.
  * - The cancel button receives `autoFocus` so focus moves into the dialog on mount.
  * - Focus is trapped within the dialog panel: Tab/Shift+Tab cycle between focusable
  *   elements without escaping into the page behind the backdrop.
- * - The Escape key closes the dialog.
+ * - The Escape key closes the dialog (handled via `onKeyDown` on the dialog element).
+ * - Clicking the backdrop area (outside the panel) also cancels.
  * - Focus returns to the trigger element when the dialog closes (handled by the caller
  *   via `deleteTriggerRef`).
  */
@@ -39,17 +43,13 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const titleId = 'confirm-dialog-title';
-  const panelRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
-  // Handle Escape to close and Tab/Shift+Tab to trap focus within the dialog.
+  // Trap Tab/Shift+Tab focus within the dialog.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        onCancel();
-        return;
-      }
-      if (e.key !== 'Tab' || !panelRef.current) return;
-      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
         'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])',
       );
       if (focusable.length === 0) return;
@@ -65,24 +65,36 @@ export function ConfirmDialog({
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel]);
+  }, []);
+
+  /**
+   * Dismiss the dialog when the user clicks outside the panel content.
+   * The native `<dialog>` element fills the viewport, so a click whose target
+   * is the `<dialog>` itself (i.e. the backdrop area) means the user clicked
+   * outside the inner panel div.
+   */
+  function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>) {
+    if (e.target === dialogRef.current) {
+      onCancel();
+    }
+  }
 
   return (
-    <div
+    // The native <dialog> element renders with role="dialog" and is a
+    // recognised interactive element, so click + keyboard handlers are valid.
+    <dialog
+      ref={dialogRef}
+      aria-modal="true"
+      aria-labelledby={titleId}
       className={styles.backdrop}
-      // Clicking outside the panel cancels.
-      onClick={onCancel}
       data-testid="confirm-dialog-backdrop"
+      onClick={handleBackdropClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onCancel();
+      }}
+      open
     >
-      {/* Stop propagation so clicks inside the panel don't bubble to the backdrop. */}
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className={styles.dialog}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className={styles.dialog}>
         <h2 id={titleId} className={styles.title}>
           {title}
         </h2>
@@ -97,6 +109,6 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }
