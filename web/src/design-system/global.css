@@ -1,6 +1,9 @@
 /*
  * Global base styles — applied once via main.tsx.
  * All values reference design-system tokens; no magic numbers.
+ *
+ * Scope: element-level defaults only.
+ * Component-level styles live in their own CSS Modules.
  */
 
 *,
@@ -24,6 +27,7 @@ body {
   background-color: var(--color-surface-raised);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: var(--transition-theme);
 }
 
 h1,
@@ -32,8 +36,9 @@ h3,
 h4,
 h5,
 h6 {
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
+  letter-spacing: var(--letter-spacing-tight);
   color: var(--color-text);
 }
 
@@ -54,6 +59,7 @@ p {
 a {
   color: var(--color-primary);
   text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 a:hover {
@@ -70,10 +76,13 @@ textarea,
 select {
   font-family: inherit;
   font-size: var(--font-size-base);
+  color: var(--color-text);
+  background-color: var(--color-surface);
 }
 
-/* Focus visible ring — applied globally via :focus-visible */
+/* Global focus-visible ring — component-specific overrides are allowed */
 :focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: var(--radius-sm);
 }

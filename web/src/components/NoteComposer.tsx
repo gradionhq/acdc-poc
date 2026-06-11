@@ -2,7 +2,7 @@ import type { RefObject, FormEvent } from 'react';
 import { Button } from './Button';
 import { NOTE_COLORS, type NoteColor } from '../api';
 import { countWords, countChars } from '../wordCount';
-import styles from '../App.module.css';
+import styles from './NoteComposer.module.css';
 
 export interface NoteComposerProps {
   title: string;

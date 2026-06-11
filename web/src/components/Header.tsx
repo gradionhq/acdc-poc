@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import { Button } from './Button';
 import { TagManager } from '../TagManager';
 import { SHORTCUTS } from '../useKeyboardShortcuts';
-import styles from '../App.module.css';
+import styles from './Header.module.css';
 
 export interface HeaderProps {
   theme: 'light' | 'dark';

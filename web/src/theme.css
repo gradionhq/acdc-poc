@@ -1,170 +1,43 @@
 /*
- * CSS custom properties for light / dark themes.
- * The root element receives data-theme="light" or data-theme="dark".
- * On first load the JS reads prefers-color-scheme to pick the default.
+ * Legacy theme tokens — kept for backward compatibility with global element
+ * rules (button, input, etc.) that predate the CSS Module layer.
+ * New component styles MUST use design-system tokens from tokens.css.
+ *
+ * The color scheme is now driven entirely by the token layer.
+ * :root / [data-theme="light"] / [data-theme="dark"] overrides live in
+ * tokens.css; only the element-level rules that depend on them stay here.
  */
 
-:root,
-[data-theme='light'] {
-  --color-bg: #ffffff;
-  --color-surface: #f5f5f5;
-  --color-text: #111111;
-  --color-text-muted: #555555;
-  --color-border: #cccccc;
-  --color-primary: #0066cc;
-  --color-primary-hover: #0052a3;
-  --color-danger: #cc0000;
-  --color-btn-bg: #e8e8e8;
-  --color-btn-text: #111111;
-  --color-input-bg: #ffffff;
-  --color-input-text: #111111;
-  --color-alert: #cc0000;
-  /* Note card color accent backgrounds — light tints */
-  --color-card-red: #fef2f2;
-  --color-card-yellow: #fefce8;
-  --color-card-green: #f0fdf4;
-  --color-card-blue: #eff6ff;
-  --color-card-purple: #faf5ff;
-}
-
-[data-theme='dark'] {
-  --color-bg: #121212;
-  --color-surface: #1e1e1e;
-  --color-text: #e8e8e8;
-  --color-text-muted: #aaaaaa;
-  --color-border: #444444;
-  --color-primary: #4da6ff;
-  --color-primary-hover: #80c0ff;
-  --color-danger: #ff6b6b;
-  --color-btn-bg: #2c2c2c;
-  --color-btn-text: #e8e8e8;
-  --color-input-bg: #1e1e1e;
-  --color-input-text: #e8e8e8;
-  --color-alert: #ff6b6b;
-  /* Note card color accent backgrounds — dark, low-saturation tints */
-  --color-card-red: #2d1515;
-  --color-card-yellow: #2b2100;
-  --color-card-green: #0f2a18;
-  --color-card-blue: #0d1f36;
-  --color-card-purple: #1e1030;
-}
-
-/* Base element styles using custom properties */
-body {
-  background-color: var(--color-bg);
-  color: var(--color-text);
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
-}
-
-button {
-  background-color: var(--color-btn-bg);
-  color: var(--color-btn-text);
-  border: 1px solid var(--color-border);
-  padding: 0.25rem 0.5rem;
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-button:hover:not(:disabled) {
-  background-color: var(--color-primary);
-  color: #ffffff;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-input,
-textarea {
-  background-color: var(--color-input-bg);
-  color: var(--color-input-text);
-  border: 1px solid var(--color-border);
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-}
-
-a {
-  color: var(--color-primary);
-}
-
-a:hover {
-  color: var(--color-primary-hover);
-}
-
-p[role='alert'] {
-  color: var(--color-alert);
-}
-
-/* Layout */
-main {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 1rem;
-}
-
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-header h1 {
-  margin: 0;
-}
-
-/* Theme toggle button — distinct style so it stands out */
+/* Theme toggle button — global class used by Header.tsx */
 .theme-toggle {
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  font-size: 1.1rem;
-  padding: 0.3rem 0.6rem;
-  border-radius: 20px;
+  border: 1px solid var(--color-surface-border);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-base);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-full);
   cursor: pointer;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+  transition: var(--transition-colors);
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .theme-toggle:hover {
-  background-color: var(--color-primary);
-  color: #ffffff;
+  background-color: var(--color-surface-border);
+  color: var(--color-text);
 }
 
-ul {
-  list-style: none;
-  padding: 0;
-}
-
-li {
-  border: 1px solid var(--color-border);
-  background-color: var(--color-surface);
-  padding: 0.5rem;
-  margin-bottom: 0.5rem;
-  border-radius: 4px;
-}
-
-nav[aria-label='Pagination'] {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-/* Toast notifications */
+/* Toast notifications — global classes used by ToastContainer.tsx */
 .toast-container {
   position: fixed;
   bottom: 1.5rem;
   right: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-2);
   z-index: 1000;
   max-width: 360px;
   pointer-events: none;
@@ -174,28 +47,28 @@ nav[aria-label='Pagination'] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.6rem 0.9rem;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-surface-border);
   background-color: var(--color-surface);
   color: var(--color-text);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
   pointer-events: all;
   animation: toast-in 0.2s ease;
 }
 
 .toast--success {
-  border-left: 4px solid var(--color-primary);
+  border-left: 3px solid var(--color-primary);
 }
 
 .toast--error {
-  border-left: 4px solid var(--color-danger);
+  border-left: 3px solid var(--color-danger);
 }
 
 .toast__message {
   flex: 1;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
 .toast__dismiss {
@@ -203,21 +76,23 @@ nav[aria-label='Pagination'] {
   border: none;
   color: var(--color-text-muted);
   cursor: pointer;
-  font-size: 0.85rem;
-  padding: 0.1rem 0.3rem;
-  border-radius: 3px;
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
   line-height: 1;
+  min-height: 0;
+  min-width: 0;
 }
 
 .toast__dismiss:hover:not(:disabled) {
-  background-color: var(--color-btn-bg);
+  background-color: var(--color-surface-border);
   color: var(--color-text);
 }
 
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;

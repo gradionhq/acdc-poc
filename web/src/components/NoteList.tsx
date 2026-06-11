@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import { Button } from './Button';
 import { NoteCard, type NoteCardProps } from './NoteCard';
 import type { Note } from '../api';
-import styles from '../App.module.css';
+import styles from './NoteList.module.css';
 
 /** All props that NoteList passes through to each NoteCard, plus NoteList-specific props. */
 export type NoteListProps = Omit<NoteCardProps, 'note'> & {

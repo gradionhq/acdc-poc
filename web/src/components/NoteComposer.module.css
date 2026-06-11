@@ -1,0 +1,131 @@
+/*
+ * NoteComposer component styles — CSS Module.
+ * All values reference design-system tokens; no magic numbers.
+ */
+
+/* ── Create-note form ─────────────────────────────────────────── */
+
+.form {
+  margin-bottom: var(--space-6);
+}
+
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5) var(--space-6);
+}
+
+.formTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-4);
+  color: var(--color-text);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-base);
+  transition: var(--transition-colors);
+}
+
+.input:hover,
+.textarea:hover {
+  border-color: var(--color-text-subtle);
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: var(--color-surface-border-focus);
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.wordCount {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.formActions {
+  margin-top: var(--space-4);
+}
+
+/* ── Color picker (swatches) ─────────────────────────────────── */
+
+.colorPicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.colorSwatch {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.colorSwatch:hover {
+  transform: scale(1.15);
+}
+
+.colorSwatchSelected {
+  border-color: var(--color-text);
+  transform: scale(1.1);
+}
+
+/* Individual swatch colors */
+/* stylelint-disable selector-class-pattern */
+.swatch-none {
+  background-color: var(--color-surface-border);
+}
+.swatch-red {
+  background-color: #ef4444;
+}
+.swatch-yellow {
+  background-color: #eab308;
+}
+.swatch-green {
+  background-color: #22c55e;
+}
+.swatch-blue {
+  background-color: #3b82f6;
+}
+.swatch-purple {
+  background-color: #a855f7;
+}
+/* stylelint-enable selector-class-pattern */

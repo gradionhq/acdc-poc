@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import { Button } from './Button';
 import type { SortOrder } from '../api';
-import styles from '../App.module.css';
+import styles from './FilterBar.module.css';
 
 export interface FilterBarProps {
   searchInput: string;

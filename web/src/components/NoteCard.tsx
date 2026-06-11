@@ -8,7 +8,7 @@ import {
   type Note,
   type NoteColor,
 } from '../api';
-import styles from '../App.module.css';
+import styles from './NoteCard.module.css';
 
 export interface NoteCardProps {
   note: Note;

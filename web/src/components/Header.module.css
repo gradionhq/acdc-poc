@@ -1,0 +1,130 @@
+/*
+ * Header component styles — CSS Module.
+ * All values reference design-system tokens; no magic numbers.
+ */
+
+/* ── Page header ──────────────────────────────────────────────── */
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-surface-border);
+}
+
+.pageTitle {
+  margin: 0;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+  color: var(--color-text);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ── Icon button (theme toggle, help toggle, close) ──────────── */
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  /* Meets 44 px WCAG touch target via the outer flex item sizing */
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.iconButton:hover {
+  color: var(--color-text);
+  border-color: var(--color-primary);
+  background-color: var(--color-tag-bg);
+}
+
+/* ── Keyboard shortcut help panel ────────────────────────────── */
+
+.helpPanel {
+  margin-bottom: var(--space-6);
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.helpPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.helpPanelTitle {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.shortcutList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.shortcutItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.kbd {
+  display: inline-block;
+  min-width: 3.5rem;
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  text-align: center;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-base);
+  box-shadow: 0 1px 0 var(--color-surface-border);
+}
+
+/* ── Responsive overrides — ≤ 480 px ─────────────────────────── */
+
+@media (max-width: 480px) {
+  /* Allow the header row to wrap so long action buttons don't overflow */
+  .pageHeader {
+    align-items: flex-start;
+  }
+
+  /* Scale down the page title so it doesn't consume the full row */
+  .pageTitle {
+    font-size: var(--font-size-xl);
+  }
+}

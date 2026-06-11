@@ -1,5 +1,5 @@
 import { Button } from './Button';
-import styles from '../App.module.css';
+import styles from './Pagination.module.css';
 
 export interface PaginationProps {
   page: number;
