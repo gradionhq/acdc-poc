@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   attachmentDownloadUrl,
   createNote,
@@ -19,6 +19,7 @@ import { ToastContainer } from './ToastContainer';
 import { useTheme } from './useTheme';
 import { countWords, countChars } from './wordCount';
 import { useToast } from './useToast';
+import { useKeyboardShortcuts, SHORTCUTS } from './useKeyboardShortcuts';
 import styles from './App.module.css';
 
 const PAGE_SIZE = 5;
@@ -59,6 +60,13 @@ export function App() {
   const [attachmentsOpen, setAttachmentsOpen] = useState<Record<string, boolean>>({});
   /** noteId → upload error string. */
   const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
+  /** Whether the keyboard shortcut help panel is open. */
+  const [showHelp, setShowHelp] = useState(false);
+
+  /** Ref to the new-note title input — used by the `n` shortcut. */
+  const newNoteTitleRef = useRef<HTMLInputElement>(null);
+  /** Ref to the search input — used by the `/` shortcut. */
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
@@ -274,18 +282,86 @@ export function App() {
     }
   }
 
+  const shortcutHandlers = {
+    onNewNote: useCallback(() => {
+      newNoteTitleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      newNoteTitleRef.current?.focus();
+    }, []),
+    onFocusSearch: useCallback(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, []),
+    onEscape: useCallback(() => {
+      if (showHelp) {
+        setShowHelp(false);
+        return;
+      }
+      if (editingId !== null) {
+        setEditingId(null);
+        setEditTitle('');
+        setEditBody('');
+        setEditTagsInput('');
+        return;
+      }
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }, [showHelp, editingId]),
+    onToggleHelp: useCallback(() => setShowHelp((prev) => !prev), []),
+  };
+
+  useKeyboardShortcuts(shortcutHandlers);
+
   return (
     <main className={styles.page}>
       <header className={styles.pageHeader}>
         <h1 className={styles.pageTitle}>Notes</h1>
-        <button
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          className="theme-toggle"
-          onClick={toggleTheme}
-        >
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            aria-label="Show keyboard shortcuts"
+            aria-pressed={showHelp}
+            className={styles.iconButton}
+            onClick={() => setShowHelp((prev) => !prev)}
+          >
+            ?
+          </button>
+          <button
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="theme-toggle"
+            onClick={toggleTheme}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
       </header>
+
+      {showHelp && (
+        <div
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+          aria-modal="true"
+          className={styles.helpPanel}
+        >
+          <div className={styles.helpPanelHeader}>
+            <h2 className={styles.helpPanelTitle}>Keyboard shortcuts</h2>
+            <button
+              aria-label="Close keyboard shortcuts"
+              className={styles.iconButton}
+              onClick={() => setShowHelp(false)}
+            >
+              ✕
+            </button>
+          </div>
+          <ul className={styles.shortcutList}>
+            {SHORTCUTS.map(({ key, description }) => (
+              <li key={key} className={styles.shortcutItem}>
+                <kbd className={styles.kbd}>{key}</kbd>
+                <span>{description}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {error && (
         <p role="alert" className={styles.alert}>
           {error}
@@ -297,6 +373,7 @@ export function App() {
         <label className={styles.fieldLabel}>
           Search
           <input
+            ref={searchInputRef}
             className={styles.input}
             aria-label="Search notes"
             placeholder="Search notes…"
@@ -326,6 +403,7 @@ export function App() {
           <label className={styles.fieldLabel}>
             Title
             <input
+              ref={newNoteTitleRef}
               className={styles.input}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
