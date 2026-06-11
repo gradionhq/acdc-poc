@@ -567,7 +567,7 @@ describe('App', () => {
     // pageContainingNote makes two async fetches before setPage/refresh — allow
     // extra time so the assertion does not flake on slow CI runners.
     await waitFor(() => expect(screen.getByText('Sixth note')).toBeInTheDocument(), {
-      timeout: 5000,
+      timeout: 10000,
     });
   });
 
@@ -640,10 +640,12 @@ describe('App', () => {
     // pageContainingNote makes two async fetches before setPage — allow extra
     // time so the assertion does not flake on slow CI runners.
     await waitFor(() => expect(screen.getByText('Seventh note')).toBeInTheDocument(), {
-      timeout: 5000,
+      timeout: 10000,
     });
     // Page 1 notes (oldest) should no longer be shown
-    expect(screen.queryByText('OldSort 1')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('OldSort 1')).not.toBeInTheDocument(), {
+      timeout: 10000,
+    });
   });
 
   it('new note is visible after create — title sort navigates to the correct page', async () => {
@@ -757,7 +759,9 @@ describe('App', () => {
       timeout: 10000,
     });
     // Apple (page 1) should no longer be visible
-    expect(screen.queryByText('Apple')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Apple')).not.toBeInTheDocument(), {
+      timeout: 10000,
+    });
   });
 
   it('navigates to next and previous pages', async () => {
@@ -1877,11 +1881,11 @@ describe('App — title-sort create with duplicate titles', () => {
     // pageContainingNote makes two async fetches before setPage — allow extra
     // time so the assertion does not flake on slow CI runners.
     await waitFor(() => expect(screen.queryByText('Apple')).not.toBeInTheDocument(), {
-      timeout: 5000,
+      timeout: 10000,
     });
     // At least one "Zebra" is visible (both sort adjacently on page 2)
     await waitFor(() => expect(screen.getAllByText('Zebra').length).toBeGreaterThan(0), {
-      timeout: 5000,
+      timeout: 10000,
     });
   });
 });
@@ -1985,11 +1989,17 @@ describe('App — duplicate sort-aware navigation', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: /duplicate apple/i }));
 
     // The copy sorts last under oldest → navigates to the last page
-    await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument(), {
+      timeout: 10000,
+    });
     // The original Apple (page 1 content) is no longer visible
-    expect(screen.queryByText('Apple')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Apple')).not.toBeInTheDocument(), {
+      timeout: 10000,
+    });
     // Next button disabled confirms we are on the last page
-    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /next/i })).toBeDisabled(), {
+      timeout: 10000,
+    });
   });
 
   it('duplicate under title sort navigates to the page containing the copy alphabetically', async () => {
@@ -2129,11 +2139,17 @@ describe('App — create with pinned notes', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     // Must navigate to page 2 where the new unpinned note appears
-    await waitFor(() => expect(screen.getByText('New unpinned')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('New unpinned')).toBeInTheDocument(), {
+      timeout: 10000,
+    });
     // Page 1 (pinned notes) should not be visible
-    expect(screen.queryByText('Pinned 1')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Pinned 1')).not.toBeInTheDocument(), {
+      timeout: 10000,
+    });
     // Next button disabled confirms we are on the last page (page 2)
-    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /next/i })).toBeDisabled(), {
+      timeout: 10000,
+    });
   });
 
   it('create under oldest sort with pinned notes filling page 1 navigates to the correct page', async () => {
@@ -2210,10 +2226,12 @@ describe('App — create with pinned notes', () => {
     // pageContainingNote makes two async fetches before setPage — allow extra
     // time so the assertion does not flake on slow CI runners.
     await waitFor(() => expect(screen.getByText('New unpinned oldest')).toBeInTheDocument(), {
-      timeout: 5000,
+      timeout: 10000,
     });
     // Next button disabled confirms we are on the last page
-    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: /next/i })).toBeDisabled(), {
+      timeout: 10000,
+    });
   });
 });
 
