@@ -1,3 +1,7 @@
+/** Fixed palette of named color labels. */
+export const NOTE_COLORS = ['none', 'red', 'yellow', 'green', 'blue', 'purple'] as const;
+export type NoteColor = (typeof NOTE_COLORS)[number];
+
 export interface Note {
   id: string;
   title: string;
@@ -6,6 +10,7 @@ export interface Note {
   createdAt: number;
   pinned: boolean;
   archived: boolean;
+  color: NoteColor;
 }
 
 export interface Attachment {
@@ -42,7 +47,7 @@ export class NoteStore {
   private readonly attachments = new Map<string, Attachment>();
   private seq = 0;
 
-  create(input: { title: string; body: string; tags?: string[] }): Note {
+  create(input: { title: string; body: string; tags?: string[]; color?: NoteColor }): Note {
     this.seq += 1;
     const note: Note = {
       id: String(this.seq),
@@ -54,6 +59,7 @@ export class NoteStore {
       createdAt: this.seq,
       pinned: false,
       archived: false,
+      color: input.color ?? 'none',
     };
     this.notes.set(note.id, note);
     return note;
@@ -63,7 +69,10 @@ export class NoteStore {
     return this.notes.get(id);
   }
 
-  update(id: string, input: { title?: string; body?: string; tags?: string[] }): Note | undefined {
+  update(
+    id: string,
+    input: { title?: string; body?: string; tags?: string[]; color?: NoteColor },
+  ): Note | undefined {
     const existing = this.notes.get(id);
     if (!existing) return undefined;
     const updated: Note = {
@@ -71,15 +80,16 @@ export class NoteStore {
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.body !== undefined ? { body: input.body } : {}),
       ...(input.tags !== undefined ? { tags: input.tags } : {}),
+      ...(input.color !== undefined ? { color: input.color } : {}),
     };
     this.notes.set(id, updated);
     return updated;
   }
 
   /**
-   * Duplicate an existing note: copies title (prefixed "Copy of …"), body, and
-   * tags into a brand-new note.  The duplicate gets its own id and createdAt
-   * timestamp, is not pinned, and does not inherit any attachments.
+   * Duplicate an existing note: copies title (prefixed "Copy of …"), body,
+   * tags, and color into a brand-new note.  The duplicate gets its own id and
+   * createdAt timestamp, is not pinned, and does not inherit any attachments.
    * Returns undefined when the source note does not exist.
    */
   duplicate(id: string): Note | undefined {
@@ -89,6 +99,7 @@ export class NoteStore {
       title: `Copy of ${source.title}`,
       body: source.body,
       tags: [...source.tags],
+      color: source.color,
     });
   }
 
@@ -212,6 +223,55 @@ export class NoteStore {
       }
     }
     return result;
+  }
+
+  /**
+   * Return every unique tag currently in use, paired with how many notes carry it.
+   * Results are sorted alphabetically by tag name.
+   */
+  listTags(): Array<{ tag: string; count: number }> {
+    const counts = new Map<string, number>();
+    for (const note of this.notes.values()) {
+      for (const tag of note.tags) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => a.tag.localeCompare(b.tag));
+  }
+
+  /**
+   * Rename a tag across every note that carries it.
+   * Returns the number of notes that were updated.
+   * Callers are responsible for verifying that `to` does not already exist as a
+   * separate tag before calling this method.
+   */
+  renameTag(from: string, to: string): number {
+    let affected = 0;
+    for (const [id, note] of this.notes.entries()) {
+      if (note.tags.includes(from)) {
+        const newTags = note.tags.map((t) => (t === from ? to : t));
+        this.notes.set(id, { ...note, tags: newTags });
+        affected++;
+      }
+    }
+    return affected;
+  }
+
+  /**
+   * Delete a tag from every note that carries it.
+   * Returns the number of notes that were modified.
+   */
+  deleteTag(tag: string): number {
+    let affected = 0;
+    for (const [id, note] of this.notes.entries()) {
+      if (note.tags.includes(tag)) {
+        this.notes.set(id, { ...note, tags: note.tags.filter((t) => t !== tag) });
+        affected++;
+      }
+    }
+    return affected;
   }
 
   /** Test-only: clear all notes and attachments and reset the id sequence. */

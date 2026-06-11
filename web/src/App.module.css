@@ -25,6 +25,12 @@
   color: var(--color-text);
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 /* ── Alert banner ────────────────────────────────────────────── */
 
 .alert {
@@ -268,6 +274,36 @@
   border-radius: var(--radius-base);
 }
 
+/* ── Drag-and-drop dropzone ──────────────────────────────────── */
+
+.dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  margin-bottom: var(--space-3);
+  border: 2px dashed var(--color-surface-border);
+  border-radius: var(--radius-base);
+  background-color: var(--color-surface);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+  cursor: default;
+  min-height: 4rem;
+}
+
+.dropzoneActive {
+  border-color: var(--color-primary);
+  background-color: var(--color-tag-bg);
+}
+
+.dropzoneHint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+  pointer-events: none;
+}
+
 .attachmentUpload {
   display: flex;
   flex-direction: column;
@@ -288,6 +324,78 @@
 .attachmentEmpty {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+}
+
+/* ── Color picker (swatches) ─────────────────────────────────── */
+
+.colorPicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.colorSwatch {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    border-color 0.1s ease;
+}
+
+.colorSwatch:hover {
+  transform: scale(1.15);
+}
+
+.colorSwatchSelected {
+  border-color: var(--color-text);
+  transform: scale(1.1);
+}
+
+/* Individual swatch colors */
+.swatch-none {
+  background-color: var(--color-surface-border);
+}
+.swatch-red {
+  background-color: #ef4444;
+}
+.swatch-yellow {
+  background-color: #eab308;
+}
+.swatch-green {
+  background-color: #22c55e;
+}
+.swatch-blue {
+  background-color: #3b82f6;
+}
+.swatch-purple {
+  background-color: #a855f7;
+}
+
+/* ── Note card color accents ────────────────────────────────── */
+
+.card-red {
+  border-left: 4px solid #ef4444;
+  background-color: var(--color-card-red);
+}
+.card-yellow {
+  border-left: 4px solid #eab308;
+  background-color: var(--color-card-yellow);
+}
+.card-green {
+  border-left: 4px solid #22c55e;
+  background-color: var(--color-card-green);
+}
+.card-blue {
+  border-left: 4px solid #3b82f6;
+  background-color: var(--color-card-blue);
+}
+.card-purple {
+  border-left: 4px solid #a855f7;
+  background-color: var(--color-card-purple);
 }
 
 /* ── Pagination ──────────────────────────────────────────────── */

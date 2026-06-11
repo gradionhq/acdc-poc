@@ -145,7 +145,7 @@ describe('ToastContainer', () => {
 // App integration — toast messages on actions
 // ---------------------------------------------------------------------------
 import { App } from './App';
-import { listNotes } from './api';
+import { listNotes, type NoteColor } from './api';
 
 type MockNote = {
   id: string;
@@ -154,6 +154,7 @@ type MockNote = {
   tags: string[];
   pinned: boolean;
   archived: boolean;
+  color: NoteColor;
 };
 
 function mockFetchSequence() {
@@ -187,6 +188,7 @@ function mockFetchSequence() {
           title: string;
           body: string;
           tags?: string[];
+          color?: NoteColor;
         };
         const n: MockNote = {
           id: String(++seq),
@@ -195,6 +197,7 @@ function mockFetchSequence() {
           tags: b.tags ?? [],
           pinned: false,
           archived: false,
+          color: b.color ?? 'none',
         };
         notes.push(n);
         return new Response(JSON.stringify(n), { status: 201 });
@@ -205,6 +208,7 @@ function mockFetchSequence() {
           title?: string;
           body?: string;
           tags?: string[];
+          color?: NoteColor;
         };
         notes = notes.map((n) =>
           n.id === id
@@ -213,6 +217,7 @@ function mockFetchSequence() {
                 ...(b.title !== undefined ? { title: b.title } : {}),
                 ...(b.body !== undefined ? { body: b.body } : {}),
                 ...(b.tags !== undefined ? { tags: b.tags } : {}),
+                ...(b.color !== undefined ? { color: b.color } : {}),
               }
             : n,
         );

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { NoteStore } from './store.js';
 import { createNotesRouter } from './notes.js';
+import { createTagsRouter } from './tags.js';
 import { createHealthRouter } from './health.js';
 import { createOpenApiRouter } from './openapi.js';
 import { requestLogger } from './logger.js';
@@ -32,6 +33,7 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
   app.use('/api/health', createHealthRouter());
   app.use('/api/openapi.json', createOpenApiRouter());
   app.use('/api/notes', createNotesRouter(store));
+  app.use('/api/tags', createTagsRouter(store));
   // Test-only reset endpoint. Mounted ONLY when ENABLE_TEST_RESET=1 (set by the
   // e2e webServer). Never present in production — there is no way to enable it
   // without the env flag, so it cannot be reached by clients.
@@ -44,12 +46,16 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
   // Any other /api/* is a JSON 404 — never the SPA fallback.
   app.use('/api', (_req: Request, res: Response) => res.status(404).json({ error: 'not found' }));
 
-  // Handle multer errors (file too large, rejected content type) as JSON 400.
+  // Handle multer errors (file too large, too many files, rejected content type).
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         res.status(413).json({ error: 'file too large' });
+        return;
+      }
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        res.status(400).json({ error: 'too many files' });
         return;
       }
       res.status(400).json({ error: err.message });

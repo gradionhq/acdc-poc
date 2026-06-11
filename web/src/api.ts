@@ -1,3 +1,6 @@
+export const NOTE_COLORS = ['none', 'red', 'yellow', 'green', 'blue', 'purple'] as const;
+export type NoteColor = (typeof NOTE_COLORS)[number];
+
 export interface Note {
   id: string;
   title: string;
@@ -5,6 +8,11 @@ export interface Note {
   tags: string[];
   pinned: boolean;
   archived: boolean;
+  color: NoteColor;
+}
+
+function isNoteColor(value: unknown): value is NoteColor {
+  return typeof value === 'string' && (NOTE_COLORS as readonly string[]).includes(value);
 }
 
 function isNote(value: unknown): value is Note {
@@ -17,7 +25,8 @@ function isNote(value: unknown): value is Note {
     Array.isArray(v.tags) &&
     (v.tags as unknown[]).every((t) => typeof t === 'string') &&
     typeof v.pinned === 'boolean' &&
-    typeof v.archived === 'boolean'
+    typeof v.archived === 'boolean' &&
+    isNoteColor(v.color)
   );
 }
 
@@ -64,6 +73,7 @@ export async function createNote(input: {
   title: string;
   body: string;
   tags?: string[];
+  color?: NoteColor;
 }): Promise<Note> {
   const res = await fetch(base, {
     method: 'POST',
@@ -78,7 +88,7 @@ export async function createNote(input: {
 
 export async function updateNote(
   id: string,
-  input: { title?: string; body?: string; tags?: string[] },
+  input: { title?: string; body?: string; tags?: string[]; color?: NoteColor },
 ): Promise<Note> {
   const res = await fetch(`${base}/${id}`, {
     method: 'PUT',
@@ -149,6 +159,28 @@ export async function uploadAttachment(noteId: string, file: File): Promise<Atta
   return created;
 }
 
+/**
+ * Upload multiple files at once using the 'files' field.
+ * Returns the list of successfully created attachment metadata.
+ * Throws an Error with the server-provided message on failure.
+ */
+export async function uploadAttachments(noteId: string, files: File[]): Promise<AttachmentMeta[]> {
+  const form = new FormData();
+  for (const file of files) {
+    form.append('files', file);
+  }
+  const res = await fetch(`${base}/${noteId}/attachments`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to upload attachments');
+  }
+  const created: unknown = await res.json();
+  if (!Array.isArray(created) || !created.every(isAttachmentMeta)) {
+    throw new Error('invalid attachments payload');
+  }
+  return created;
+}
+
 export async function listAttachments(noteId: string): Promise<AttachmentMeta[]> {
   const res = await fetch(`${base}/${noteId}/attachments`);
   if (!res.ok) throw new Error('failed to load attachments');
@@ -168,4 +200,51 @@ export async function deleteAttachment(noteId: string, filename: string): Promis
     method: 'DELETE',
   });
   if (!res.ok && res.status !== 404) throw new Error('failed to delete attachment');
+}
+
+// ── Tag management ────────────────────────────────────────────────────────────
+
+export interface TagStat {
+  tag: string;
+  count: number;
+}
+
+function isTagStat(value: unknown): value is TagStat {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.tag === 'string' && typeof v.count === 'number';
+}
+
+const tagsBase = '/api/tags';
+
+export async function listTags(): Promise<TagStat[]> {
+  const res = await fetch(tagsBase);
+  if (!res.ok) throw new Error('failed to load tags');
+  const data: unknown = await res.json();
+  if (!Array.isArray(data) || !data.every(isTagStat)) {
+    throw new Error('invalid tags payload');
+  }
+  return data;
+}
+
+export async function renameTag(from: string, to: string): Promise<{ affected: number }> {
+  const res = await fetch(`${tagsBase}/rename`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to rename tag');
+  }
+  return (await res.json()) as { affected: number };
+}
+
+export async function deleteTag(tag: string): Promise<{ affected: number }> {
+  const res = await fetch(`${tagsBase}/${encodeURIComponent(tag)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to delete tag');
+  }
+  return (await res.json()) as { affected: number };
 }

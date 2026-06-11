@@ -171,6 +171,33 @@ describe('NoteStore', () => {
     expect(result.items[0].tags).toContain('work');
   });
 
+  it('creates a note with a valid color and persists it', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b', color: 'red' });
+    expect(n.color).toBe('red');
+    expect(store.get(n.id)?.color).toBe('red');
+  });
+
+  it('defaults color to "none" when omitted on create', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    expect(n.color).toBe('none');
+  });
+
+  it('updates color via update()', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b', color: 'blue' });
+    const updated = store.update(n.id, { color: 'green' });
+    expect(updated?.color).toBe('green');
+  });
+
+  it('preserves existing color when update() does not specify color', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b', color: 'yellow' });
+    const updated = store.update(n.id, { title: 'new title' });
+    expect(updated?.color).toBe('yellow');
+  });
+
   it('sort=newest returns most-recently-created notes first (among unpinned)', () => {
     const store = new NoteStore();
     store.create({ title: 'first', body: 'b' });
@@ -440,6 +467,13 @@ describe('NoteStore — duplicate()', () => {
     const resultOldest = store.list(1, 10, undefined, undefined, 'oldest');
     const unpinnedOldest = resultOldest.items.filter((n) => !n.pinned);
     expect(unpinnedOldest[unpinnedOldest.length - 1].title).toBe('Copy of second');
+  });
+
+  it('preserves the source note color in the duplicate', () => {
+    const store = new NoteStore();
+    const original = store.create({ title: 't', body: 'b', color: 'blue' });
+    const copy = store.duplicate(original.id);
+    expect(copy!.color).toBe('blue');
   });
 });
 

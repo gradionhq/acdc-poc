@@ -244,6 +244,127 @@ describe('per-note attachment cap', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Multi-file upload (POST /:id/attachments with multiple 'files' fields)
+// ---------------------------------------------------------------------------
+
+describe('multi-file upload', () => {
+  it('uploads two files in one request and returns both metas', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    const res = await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .attach('files', Buffer.from('first'), { filename: 'a.txt', contentType: 'text/plain' })
+      .attach('files', Buffer.from('second'), { filename: 'b.txt', contentType: 'text/plain' })
+      .expect(201);
+    const body = res.body as Array<{ filename: string; contentType: string; size: number }>;
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveLength(2);
+    expect(body[0]).toMatchObject({ contentType: 'text/plain', size: 5 });
+    expect(body[1]).toMatchObject({ contentType: 'text/plain', size: 6 });
+  });
+
+  it('returns 404 when note does not exist (multi-file)', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes/no-such-note/attachments')
+      .attach('files', Buffer.from('x'), { filename: 'x.txt', contentType: 'text/plain' })
+      .expect(404);
+    expect(res.body).toEqual({ error: 'not found' });
+  });
+
+  it('returns 400 when no files field is sent', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    const res = await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .set('content-type', 'multipart/form-data')
+      .expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects over-limit file size in a multi-file upload (413)', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    const bigBuffer = Buffer.alloc(6 * 1024 * 1024, 'x');
+    const res = await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .attach('files', bigBuffer, { filename: 'big.txt', contentType: 'text/plain' })
+      .expect(413);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects disallowed content type in a multi-file upload (400)', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    const res = await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .attach('files', Buffer.from('<exe>'), {
+        filename: 'bad.exe',
+        contentType: 'application/octet-stream',
+      })
+      .expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('rejects a batch that would exceed the per-note cap (413)', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    const cap = NoteStore.MAX_ATTACHMENTS_PER_NOTE;
+
+    // Fill the note to the cap using single-file uploads
+    for (let i = 0; i < cap; i++) {
+      await request(app)
+        .post(`/api/notes/${id}/attachments`)
+        .attach('files', Buffer.from(`d${i}`), {
+          filename: `f${i}.txt`,
+          contentType: 'text/plain',
+        })
+        .expect(201);
+    }
+
+    // A multi-file batch that would go over the cap must be rejected
+    const res = await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .attach('files', Buffer.from('x'), { filename: 'x.txt', contentType: 'text/plain' })
+      .expect(413);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('enforces a per-request file count cap (rejects > MAX_FILES_PER_UPLOAD)', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    // Build a request with MAX_FILES_PER_UPLOAD + 1 files — multer should reject it
+    let req = request(app).post(`/api/notes/${id}/attachments`);
+    for (let i = 0; i < 11; i++) {
+      req = req.attach('files', Buffer.from(`d${i}`), {
+        filename: `f${i}.txt`,
+        contentType: 'text/plain',
+      });
+    }
+    const res = await req.expect(400);
+    expect(res.body).toEqual({ error: 'too many files' });
+  });
+
+  it('enforces the per-request total-bytes cap (rejects batches > 25 MB)', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    // Each file is individually under the 5 MB per-file limit (4.5 MB < 5 MB),
+    // but 6 × 4.5 MB = 27 MB exceeds the 25 MB per-request total-bytes cap.
+    // This validates that the route boundary enforces the aggregate memory bound.
+    const fourPointFiveMb = Buffer.alloc(4.5 * 1024 * 1024, 'x');
+    let req = request(app).post(`/api/notes/${id}/attachments`);
+    for (let i = 0; i < 6; i++) {
+      req = req.attach('files', fourPointFiveMb, {
+        filename: `big${i}.txt`,
+        contentType: 'text/plain',
+      });
+    }
+    const res = await req.expect(413);
+    expect(res.body).toHaveProperty('error');
+  });
+});
+
 describe('attachment list', () => {
   it('returns empty array before any uploads', async () => {
     const app = createApp();

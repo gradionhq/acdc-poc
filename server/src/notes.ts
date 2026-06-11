@@ -1,6 +1,6 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
-import { NoteStore, type SortOrder } from './store.js';
+import { NOTE_COLORS, NoteStore, type NoteColor, type SortOrder } from './store.js';
 
 const VALID_SORT_VALUES: readonly SortOrder[] = ['newest', 'oldest', 'title'];
 
@@ -31,6 +31,18 @@ function contentDispositionFilename(filename: string): string {
 /** 5 MB upper bound for individual file uploads. */
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
+/** Maximum number of files accepted in a single multi-file upload request. */
+const MAX_FILES_PER_UPLOAD = 10;
+
+/**
+ * Maximum total bytes buffered across all files in a single upload request.
+ * Caps memory usage per request regardless of how many files are sent.
+ * Set to 25 MB (5 files × 5 MB) — a reasonable middle-ground that still
+ * allows meaningful multi-file batches without risking heap pressure under
+ * concurrency.
+ */
+const MAX_REQUEST_BYTES = 25 * 1024 * 1024;
+
 /**
  * Allowed MIME content types for attachment uploads.
  * We check the declared content-type; no magic-byte sniffing needed for the
@@ -49,7 +61,7 @@ const ALLOWED_CONTENT_TYPES = new Set([
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_FILE_BYTES },
+  limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES_PER_UPLOAD },
   fileFilter(_req, file, cb) {
     if (ALLOWED_CONTENT_TYPES.has(file.mimetype)) {
       cb(null, true);
@@ -77,6 +89,20 @@ function parseTags(value: unknown): string[] | null {
   return [...new Set(normalized)];
 }
 
+const COLOR_ERROR = `color must be one of: ${NOTE_COLORS.join(', ')}`;
+
+/**
+ * Validate a color field from client input.
+ * Returns the parsed NoteColor on success, or null when the value is invalid.
+ * Returns undefined when the field is absent (caller treats as "use default").
+ */
+function parseColor(value: unknown): NoteColor | null | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') return null;
+  if ((NOTE_COLORS as readonly string[]).includes(value)) return value as NoteColor;
+  return null;
+}
+
 export function createNotesRouter(store: NoteStore): Router {
   const router = Router();
 
@@ -102,10 +128,11 @@ export function createNotesRouter(store: NoteStore): Router {
   });
 
   router.post('/', (req: Request, res: Response) => {
-    const { title, body, tags } = (req.body ?? {}) as {
+    const { title, body, tags, color } = (req.body ?? {}) as {
       title?: unknown;
       body?: unknown;
       tags?: unknown;
+      color?: unknown;
     };
     if (typeof title !== 'string' || typeof body !== 'string') {
       res.status(400).json({ error: 'title and body must be strings' });
@@ -116,7 +143,19 @@ export function createNotesRouter(store: NoteStore): Router {
       res.status(400).json({ error: 'tags must be an array of non-empty strings' });
       return;
     }
-    res.status(201).json(store.create({ title, body, tags: parsedTags }));
+    const parsedColor = parseColor(color);
+    if (parsedColor === null) {
+      res.status(400).json({ error: COLOR_ERROR });
+      return;
+    }
+    res.status(201).json(
+      store.create({
+        title,
+        body,
+        tags: parsedTags,
+        ...(parsedColor !== undefined ? { color: parsedColor } : {}),
+      }),
+    );
   });
 
   router.get('/:id', (req: Request, res: Response) => {
@@ -134,8 +173,13 @@ export function createNotesRouter(store: NoteStore): Router {
       res.status(400).json({ error: 'payload must be an object' });
       return;
     }
-    const { title, body, tags } = payload as { title?: unknown; body?: unknown; tags?: unknown };
-    if (title === undefined && body === undefined && tags === undefined) {
+    const { title, body, tags, color } = payload as {
+      title?: unknown;
+      body?: unknown;
+      tags?: unknown;
+      color?: unknown;
+    };
+    if (title === undefined && body === undefined && tags === undefined && color === undefined) {
       res.status(400).json({ error: 'at least one of title, body, or tags is required' });
       return;
     }
@@ -147,13 +191,23 @@ export function createNotesRouter(store: NoteStore): Router {
       res.status(400).json({ error: 'body must be a string' });
       return;
     }
+    const parsedColor = parseColor(color);
+    if (parsedColor === null) {
+      res.status(400).json({ error: COLOR_ERROR });
+      return;
+    }
     if (tags !== undefined) {
       const parsedTags = parseTags(tags);
       if (parsedTags === null) {
         res.status(400).json({ error: 'tags must be an array of non-empty strings' });
         return;
       }
-      const note = store.update(req.params.id, { title, body, tags: parsedTags });
+      const note = store.update(req.params.id, {
+        title,
+        body,
+        tags: parsedTags,
+        ...(parsedColor !== undefined ? { color: parsedColor } : {}),
+      });
       if (!note) {
         res.status(404).json({ error: 'not found' });
         return;
@@ -161,7 +215,11 @@ export function createNotesRouter(store: NoteStore): Router {
       res.json(note);
       return;
     }
-    const note = store.update(req.params.id, { title, body });
+    const note = store.update(req.params.id, {
+      title,
+      body,
+      ...(parsedColor !== undefined ? { color: parsedColor } : {}),
+    });
     if (!note) {
       res.status(404).json({ error: 'not found' });
       return;
@@ -217,7 +275,7 @@ export function createNotesRouter(store: NoteStore): Router {
 
   router.post(
     '/:id/attachments',
-    (req: Request, res: Response, next) => {
+    (req: Request, res: Response, next: NextFunction) => {
       // Verify note existence before parsing the multipart body — gives an
       // immediate 404 without consuming upload bytes for a missing note.
       if (!store.get(req.params.id)) {
@@ -233,24 +291,73 @@ export function createNotesRouter(store: NoteStore): Router {
       }
       next();
     },
-    upload.single('file'),
+    // Accept either a single 'file' field (backward-compat) or up to
+    // MAX_FILES_PER_UPLOAD files under the 'files' field.
+    upload.fields([
+      { name: 'file', maxCount: 1 },
+      { name: 'files', maxCount: MAX_FILES_PER_UPLOAD },
+    ]),
     (req: Request, res: Response) => {
-      if (!req.file) {
+      // Normalise: collect uploaded files from whichever field was used.
+      const fields = req.files as Record<string, Express.Multer.File[]> | undefined;
+      const uploadedFiles: Express.Multer.File[] = [
+        ...(fields?.['file'] ?? []),
+        ...(fields?.['files'] ?? []),
+      ];
+
+      if (uploadedFiles.length === 0) {
         res.status(400).json({ error: 'file field is required' });
         return;
       }
-      const meta = store.addAttachment(req.params.id, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype,
-        data: req.file.buffer,
-      });
-      if (!meta) {
-        // Note was deleted between the pre-check and store write — treat as 404.
-        // The cap check above ran before upload; a race here is benign for a PoC.
+
+      // Enforce total-bytes cap across the batch to bound per-request memory
+      // usage (memoryStorage buffers every byte in the heap).
+      const totalBytes = uploadedFiles.reduce((sum, f) => sum + f.size, 0);
+      if (totalBytes > MAX_REQUEST_BYTES) {
+        res.status(413).json({ error: 'request too large' });
+        return;
+      }
+
+      // Enforce cap across the entire batch: reject if adding all files would
+      // exceed the per-note limit.
+      const currentCount = store.attachmentCount(req.params.id);
+      if (currentCount + uploadedFiles.length > NoteStore.MAX_ATTACHMENTS_PER_NOTE) {
+        res.status(413).json({
+          error: `attachment limit of ${NoteStore.MAX_ATTACHMENTS_PER_NOTE} per note reached`,
+        });
+        return;
+      }
+
+      // Re-check note existence immediately before writing so the batch is
+      // either fully committed or fully rejected (no partial writes).
+      if (!store.get(req.params.id)) {
         res.status(404).json({ error: 'not found' });
         return;
       }
-      res.status(201).json(meta);
+
+      const metas = uploadedFiles.map((f) =>
+        store.addAttachment(req.params.id, {
+          filename: f.originalname,
+          contentType: f.mimetype,
+          data: f.buffer,
+        }),
+      );
+
+      // Defensive: addAttachment returns undefined only if the note was deleted
+      // between the guard above and the writes (benign PoC race).
+      if (metas.some((m) => m === undefined)) {
+        res.status(404).json({ error: 'not found' });
+        return;
+      }
+
+      // Single-file backward-compat: return a plain object (not an array)
+      // when the caller used the legacy 'file' field.
+      if (fields?.['file']?.length === 1 && !fields?.['files']?.length) {
+        res.status(201).json(metas[0]);
+        return;
+      }
+
+      res.status(201).json(metas);
     },
   );
 

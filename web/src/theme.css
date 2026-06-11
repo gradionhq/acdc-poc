@@ -19,6 +19,12 @@
   --color-input-bg: #ffffff;
   --color-input-text: #111111;
   --color-alert: #cc0000;
+  /* Note card color accent backgrounds — light tints */
+  --color-card-red: #fef2f2;
+  --color-card-yellow: #fefce8;
+  --color-card-green: #f0fdf4;
+  --color-card-blue: #eff6ff;
+  --color-card-purple: #faf5ff;
 }
 
 [data-theme='dark'] {
@@ -35,6 +41,12 @@
   --color-input-bg: #1e1e1e;
   --color-input-text: #e8e8e8;
   --color-alert: #ff6b6b;
+  /* Note card color accent backgrounds — dark, low-saturation tints */
+  --color-card-red: #2d1515;
+  --color-card-yellow: #2b2100;
+  --color-card-green: #0f2a18;
+  --color-card-blue: #0d1f36;
+  --color-card-purple: #1e1030;
 }
 
 /* Base element styles using custom properties */
