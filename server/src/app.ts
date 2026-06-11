@@ -30,7 +30,7 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        res.status(400).json({ error: 'file too large' });
+        res.status(413).json({ error: 'file too large' });
         return;
       }
       res.status(400).json({ error: err.message });

@@ -47,14 +47,14 @@ describe('attachment upload', () => {
     expect(res.body).toHaveProperty('error');
   });
 
-  it('returns 400 when file size exceeds limit', async () => {
+  it('returns 413 when file size exceeds limit', async () => {
     const app = createApp();
     const id = await seedNote(app);
     const bigBuffer = Buffer.alloc(6 * 1024 * 1024, 'x');
     const res = await request(app)
       .post(`/api/notes/${id}/attachments`)
       .attach('file', bigBuffer, { filename: 'big.txt', contentType: 'text/plain' })
-      .expect(400);
+      .expect(413);
     expect(res.body).toHaveProperty('error');
   });
 

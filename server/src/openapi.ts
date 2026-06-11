@@ -1,5 +1,33 @@
 import { Router, type Request, type Response } from 'express';
 
+// ---------------------------------------------------------------------------
+// Shared $ref helpers — avoids repeating the same inline objects many times
+// ---------------------------------------------------------------------------
+
+const REF_NOTE = { $ref: '#/components/schemas/Note' };
+const REF_ATTACHMENT_META = { $ref: '#/components/schemas/AttachmentMeta' };
+const REF_ERROR = { $ref: '#/components/schemas/ErrorResponse' };
+const REF_NOT_FOUND = { $ref: '#/components/responses/NotFound' };
+const REF_BAD_REQUEST = { $ref: '#/components/responses/BadRequest' };
+
+const JSON_CONTENT = (schema: object) => ({ 'application/json': { schema } });
+
+const NOTE_ID_PARAM = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  schema: { type: 'string' },
+  description: 'Note ID.',
+};
+
+const ATTACHMENT_NAME_PARAM = {
+  name: 'name',
+  in: 'path',
+  required: true,
+  schema: { type: 'string' },
+  description: 'Attachment filename.',
+};
+
 /** OpenAPI 3.1 document describing every route in the API. */
 const spec = {
   openapi: '3.1.0',
@@ -73,19 +101,11 @@ const spec = {
     responses: {
       NotFound: {
         description: 'Resource not found.',
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/ErrorResponse' },
-          },
-        },
+        content: JSON_CONTENT(REF_ERROR),
       },
       BadRequest: {
         description: 'Invalid request payload.',
-        content: {
-          'application/json': {
-            schema: { $ref: '#/components/schemas/ErrorResponse' },
-          },
-        },
+        content: JSON_CONTENT(REF_ERROR),
       },
     },
   },
@@ -99,11 +119,7 @@ const spec = {
         responses: {
           '200': {
             description: 'Server is healthy.',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/HealthResponse' },
-              },
-            },
+            content: JSON_CONTENT({ $ref: '#/components/schemas/HealthResponse' }),
           },
         },
       },
@@ -117,7 +133,7 @@ const spec = {
         responses: {
           '200': {
             description: 'OpenAPI 3.x document.',
-            content: { 'application/json': { schema: { type: 'object' } } },
+            content: JSON_CONTENT({ type: 'object' }),
           },
         },
       },
@@ -162,11 +178,7 @@ const spec = {
                 description: 'Total number of notes matching the current filter.',
               },
             },
-            content: {
-              'application/json': {
-                schema: { type: 'array', items: { $ref: '#/components/schemas/Note' } },
-              },
-            },
+            content: JSON_CONTENT({ type: 'array', items: REF_NOTE }),
           },
         },
       },
@@ -176,33 +188,19 @@ const spec = {
         tags: ['notes'],
         requestBody: {
           required: true,
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/CreateNoteRequest' },
-            },
-          },
+          content: JSON_CONTENT({ $ref: '#/components/schemas/CreateNoteRequest' }),
         },
         responses: {
           '201': {
             description: 'Note created.',
-            content: {
-              'application/json': { schema: { $ref: '#/components/schemas/Note' } },
-            },
+            content: JSON_CONTENT(REF_NOTE),
           },
-          '400': { $ref: '#/components/responses/BadRequest' },
+          '400': REF_BAD_REQUEST,
         },
       },
     },
     '/notes/{id}': {
-      parameters: [
-        {
-          name: 'id',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-          description: 'Note ID.',
-        },
-      ],
+      parameters: [NOTE_ID_PARAM],
       get: {
         summary: 'Get a single note',
         operationId: 'getNote',
@@ -210,11 +208,9 @@ const spec = {
         responses: {
           '200': {
             description: 'Note found.',
-            content: {
-              'application/json': { schema: { $ref: '#/components/schemas/Note' } },
-            },
+            content: JSON_CONTENT(REF_NOTE),
           },
-          '404': { $ref: '#/components/responses/NotFound' },
+          '404': REF_NOT_FOUND,
         },
       },
       put: {
@@ -223,21 +219,15 @@ const spec = {
         tags: ['notes'],
         requestBody: {
           required: true,
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/UpdateNoteRequest' },
-            },
-          },
+          content: JSON_CONTENT({ $ref: '#/components/schemas/UpdateNoteRequest' }),
         },
         responses: {
           '200': {
             description: 'Note updated.',
-            content: {
-              'application/json': { schema: { $ref: '#/components/schemas/Note' } },
-            },
+            content: JSON_CONTENT(REF_NOTE),
           },
-          '400': { $ref: '#/components/responses/BadRequest' },
-          '404': { $ref: '#/components/responses/NotFound' },
+          '400': REF_BAD_REQUEST,
+          '404': REF_NOT_FOUND,
         },
       },
       delete: {
@@ -246,20 +236,12 @@ const spec = {
         tags: ['notes'],
         responses: {
           '204': { description: 'Note deleted.' },
-          '404': { $ref: '#/components/responses/NotFound' },
+          '404': REF_NOT_FOUND,
         },
       },
     },
     '/notes/{id}/pin': {
-      parameters: [
-        {
-          name: 'id',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-          description: 'Note ID.',
-        },
-      ],
+      parameters: [NOTE_ID_PARAM],
       patch: {
         summary: 'Toggle pin on a note',
         operationId: 'togglePinNote',
@@ -267,24 +249,14 @@ const spec = {
         responses: {
           '200': {
             description: 'Updated note with toggled pinned field.',
-            content: {
-              'application/json': { schema: { $ref: '#/components/schemas/Note' } },
-            },
+            content: JSON_CONTENT(REF_NOTE),
           },
-          '404': { $ref: '#/components/responses/NotFound' },
+          '404': REF_NOT_FOUND,
         },
       },
     },
     '/notes/{id}/attachments': {
-      parameters: [
-        {
-          name: 'id',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-          description: 'Note ID.',
-        },
-      ],
+      parameters: [NOTE_ID_PARAM],
       get: {
         summary: 'List attachments for a note',
         operationId: 'listAttachments',
@@ -292,16 +264,9 @@ const spec = {
         responses: {
           '200': {
             description: 'List of attachment metadata.',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'array',
-                  items: { $ref: '#/components/schemas/AttachmentMeta' },
-                },
-              },
-            },
+            content: JSON_CONTENT({ type: 'array', items: REF_ATTACHMENT_META }),
           },
-          '404': { $ref: '#/components/responses/NotFound' },
+          '404': REF_NOT_FOUND,
         },
       },
       post: {
@@ -332,38 +297,20 @@ const spec = {
         responses: {
           '201': {
             description: 'Attachment uploaded.',
-            content: {
-              'application/json': { schema: { $ref: '#/components/schemas/AttachmentMeta' } },
-            },
+            content: JSON_CONTENT(REF_ATTACHMENT_META),
           },
-          '400': { $ref: '#/components/responses/BadRequest' },
-          '404': { $ref: '#/components/responses/NotFound' },
+          '400': REF_BAD_REQUEST,
+          '404': REF_NOT_FOUND,
           '413': {
-            description: 'Attachment limit (20 per note) reached or file too large.',
-            content: {
-              'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
-            },
+            description:
+              'Attachment limit (20 per note) reached or file exceeds the 5 MB size limit.',
+            content: JSON_CONTENT(REF_ERROR),
           },
         },
       },
     },
     '/notes/{id}/attachments/{name}': {
-      parameters: [
-        {
-          name: 'id',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-          description: 'Note ID.',
-        },
-        {
-          name: 'name',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-          description: 'Attachment filename.',
-        },
-      ],
+      parameters: [NOTE_ID_PARAM, ATTACHMENT_NAME_PARAM],
       get: {
         summary: 'Download an attachment',
         operationId: 'downloadAttachment',
@@ -373,7 +320,7 @@ const spec = {
             description: 'Raw file bytes with the original content type.',
             content: { '*/*': { schema: { type: 'string', format: 'binary' } } },
           },
-          '404': { $ref: '#/components/responses/NotFound' },
+          '404': REF_NOT_FOUND,
         },
       },
     },
