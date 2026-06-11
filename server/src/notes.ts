@@ -1,6 +1,15 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
-import { NoteStore } from './store.js';
+import { NoteStore, type SortOrder } from './store.js';
+
+const VALID_SORT_VALUES: readonly SortOrder[] = ['newest', 'oldest', 'title'];
+
+function parseSortOrder(value: unknown): SortOrder | null {
+  if (value === undefined) return 'newest';
+  if (typeof value !== 'string') return null;
+  if ((VALID_SORT_VALUES as readonly string[]).includes(value)) return value as SortOrder;
+  return null;
+}
 
 /**
  * Encode a filename for use in a Content-Disposition header following
@@ -76,7 +85,12 @@ export function createNotesRouter(store: NoteStore): Router {
     const pageSize = parsePositiveInt(req.query.pageSize, 10);
     const q = typeof req.query.q === 'string' ? req.query.q : undefined;
     const tag = typeof req.query.tag === 'string' ? req.query.tag : undefined;
-    const result = store.list(page, pageSize, q, tag);
+    const sort = parseSortOrder(req.query.sort);
+    if (sort === null) {
+      res.status(400).json({ error: 'sort must be one of: newest, oldest, title' });
+      return;
+    }
+    const result = store.list(page, pageSize, q, tag, sort);
     res.set('X-Total-Count', String(result.total));
     res.json(result.items);
   });

@@ -12,6 +12,7 @@ import {
   uploadAttachment,
   type AttachmentMeta,
   type Note,
+  type SortOrder,
 } from './api';
 import { Button } from './components/Button';
 import { NoteBody } from './NoteBody';
@@ -53,6 +54,7 @@ export function App() {
   const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
+  const [sort, setSort] = useState<SortOrder>('newest');
   /** noteId → list of attachment metadata (loaded lazily on expand). */
   const [attachments, setAttachments] = useState<Record<string, AttachmentMeta[]>>({});
   /** noteId → true while attachments panel is open. */
@@ -77,10 +79,10 @@ export function App() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  async function refresh(p = page, q = query, tf = tagFilter) {
+  async function refresh(p = page, q = query, tf = tagFilter, s = sort) {
     const seq = ++reqSeqRef.current;
     try {
-      const result = await listNotes(p, PAGE_SIZE, q, tf);
+      const result = await listNotes(p, PAGE_SIZE, q, tf, s);
       if (seq !== reqSeqRef.current) return; // stale — a newer request is in flight
       setNotes(result.notes);
       setTotal(result.total);
@@ -95,9 +97,9 @@ export function App() {
   }
 
   useEffect(() => {
-    void refresh(page, query, tagFilter);
+    void refresh(page, query, tagFilter, sort);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, query, tagFilter]);
+  }, [page, query, tagFilter, sort]);
 
   // Debounce search input: update `query` after SEARCH_DEBOUNCE_MS of inactivity.
   // Reset to page 1 whenever the query changes so results are always from the start.
@@ -126,8 +128,8 @@ export function App() {
       // If a search filter is active, clear it before navigating so the new
       // note is always visible. With a filter active, `total` reflects only
       // the filtered count; the new note may not match the query, so
-      // navigating to `lastPage` of the filtered results would not show it.
-      // Fetch the real (unfiltered) total to compute the correct last page.
+      // navigating to the target page of the unfiltered results would not show it.
+      // Fetch the real (unfiltered) total to compute the correct destination page.
       const unfilteredTotal = query !== '' ? (await listNotes(1, 1, '')).total : total;
       if (query !== '') {
         // Signal the debounce effect to skip its setPage(1) reset; onSubmit
@@ -136,14 +138,34 @@ export function App() {
         setSearchInput('');
         setQuery('');
       }
-      // New note is appended at the end (oldest-first ordering).
-      // Navigate to the last page so it is immediately visible.
       const newTotal = unfilteredTotal + 1;
-      const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      if (page === lastPage && query === '') {
-        await refresh(lastPage, '');
+      // Navigate to the page where the newly created note will appear.
+      if (sort === 'oldest') {
+        // oldest: the new note always sorts last → last page.
+        const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+        if (page === lastPage && query === '') {
+          await refresh(lastPage, '', tagFilter, sort);
+        } else {
+          setPage(lastPage);
+        }
+      } else if (sort === 'newest') {
+        // newest: the new note always sorts first → page 1.
+        if (page === 1 && query === '') {
+          await refresh(1, '', tagFilter, sort);
+        } else {
+          setPage(1);
+        }
       } else {
-        setPage(lastPage);
+        // title: the new note's page depends on its alphabetical rank among
+        // all (unfiltered) notes. Fetch the full sorted list to find its position.
+        const fullPage = await listNotes(1, newTotal, '', tagFilter, 'title');
+        const rank = fullPage.notes.findIndex((n) => n.title === title) + 1;
+        const dest = rank > 0 ? Math.ceil(rank / PAGE_SIZE) : 1;
+        if (page === dest && query === '') {
+          await refresh(dest, '', tagFilter, sort);
+        } else {
+          setPage(dest);
+        }
       }
     } catch (e: unknown) {
       addToast('Failed to create note', 'error');
@@ -338,6 +360,22 @@ export function App() {
               setTagFilter(e.target.value);
             }}
           />
+        </label>
+        <label className={styles.fieldLabel}>
+          Sort by
+          <select
+            className={styles.input}
+            aria-label="Sort notes"
+            value={sort}
+            onChange={(e) => {
+              setPage(1);
+              setSort(e.target.value as SortOrder);
+            }}
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="title">Title (A–Z)</option>
+          </select>
         </label>
       </div>
 

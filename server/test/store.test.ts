@@ -16,10 +16,11 @@ describe('NoteStore', () => {
     const created = Array.from({ length: 5 }, (_, i) =>
       store.create({ title: `t${i}`, body: `b${i}` }),
     );
-    const page1 = store.list(1, 2);
+    // Default sort is 'newest': newest notes come first.
+    const page1 = store.list(1, 2, undefined, undefined, 'oldest');
     expect(page1.total).toBe(5);
     expect(page1.items.map((n) => n.id)).toEqual([created[0].id, created[1].id]);
-    const page2 = store.list(2, 2);
+    const page2 = store.list(2, 2, undefined, undefined, 'oldest');
     expect(page2.items.map((n) => n.id)).toEqual([created[2].id, created[3].id]);
   });
 
@@ -29,7 +30,8 @@ describe('NoteStore', () => {
     store.create({ title: 'Goodbye', body: 'World is great' });
     store.create({ title: 'Unrelated', body: 'no match here' });
 
-    const result = store.list(1, 10, 'world');
+    // Use oldest sort so insertion order is preserved in this assertion.
+    const result = store.list(1, 10, 'world', undefined, 'oldest');
     expect(result.total).toBe(2);
     expect(result.items.map((n) => n.title)).toEqual(['Hello World', 'Goodbye']);
   });
@@ -150,10 +152,11 @@ describe('NoteStore', () => {
     const c = store.create({ title: 'c', body: 'C' });
     // Pin the last note
     store.togglePin(c.id);
+    // Default sort is 'newest'; among unpinned, b (newer) sorts before a.
     const result = store.list(1, 10);
     expect(result.items[0].id).toBe(c.id); // pinned → top
-    expect(result.items[1].id).toBe(a.id);
-    expect(result.items[2].id).toBe(b.id);
+    expect(result.items[1].id).toBe(b.id); // newest unpinned
+    expect(result.items[2].id).toBe(a.id); // oldest unpinned
   });
 
   it('combines query and tag filters', () => {
@@ -166,6 +169,62 @@ describe('NoteStore', () => {
     expect(result.total).toBe(1);
     expect(result.items[0].title).toBe('match title');
     expect(result.items[0].tags).toContain('work');
+  });
+
+  it('sort=newest returns most-recently-created notes first (among unpinned)', () => {
+    const store = new NoteStore();
+    store.create({ title: 'first', body: 'b' });
+    store.create({ title: 'second', body: 'b' });
+    store.create({ title: 'third', body: 'b' });
+
+    const result = store.list(1, 10, undefined, undefined, 'newest');
+    const titles = result.items.map((n) => n.title);
+    expect(titles).toEqual(['third', 'second', 'first']);
+  });
+
+  it('sort=oldest returns earliest-created notes first (among unpinned)', () => {
+    const store = new NoteStore();
+    store.create({ title: 'first', body: 'b' });
+    store.create({ title: 'second', body: 'b' });
+    store.create({ title: 'third', body: 'b' });
+
+    const result = store.list(1, 10, undefined, undefined, 'oldest');
+    const titles = result.items.map((n) => n.title);
+    expect(titles).toEqual(['first', 'second', 'third']);
+  });
+
+  it('sort=title returns notes in A→Z order by title (among unpinned)', () => {
+    const store = new NoteStore();
+    store.create({ title: 'Banana', body: 'b' });
+    store.create({ title: 'Apple', body: 'b' });
+    store.create({ title: 'Cherry', body: 'b' });
+
+    const result = store.list(1, 10, undefined, undefined, 'title');
+    const titles = result.items.map((n) => n.title);
+    expect(titles).toEqual(['Apple', 'Banana', 'Cherry']);
+  });
+
+  it('pinned notes always sort ahead of unpinned regardless of sort order', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'Zebra', body: 'b' });
+    store.create({ title: 'Apple', body: 'b' });
+    store.togglePin(a.id); // pin 'Zebra'
+
+    // title sort: 'Zebra' is pinned so it comes first despite Z > A
+    const result = store.list(1, 10, undefined, undefined, 'title');
+    expect(result.items[0].title).toBe('Zebra');
+    expect(result.items[1].title).toBe('Apple');
+  });
+
+  it('sort=newest default is used when sort param is omitted', () => {
+    const store = new NoteStore();
+    store.create({ title: 'first', body: 'b' });
+    store.create({ title: 'second', body: 'b' });
+
+    // No sort arg — default is newest
+    const result = store.list(1, 10);
+    expect(result.items[0].title).toBe('second');
+    expect(result.items[1].title).toBe('first');
   });
 });
 
@@ -277,10 +336,14 @@ describe('NoteStore — duplicate()', () => {
     store.create({ title: 'first', body: 'b' });
     const second = store.create({ title: 'second', body: 'b' });
     store.duplicate(second.id);
-    const result = store.list(1, 10);
-    // Unpinned notes are sorted by createdAt ascending; duplicate has the highest value
-    const unpinned = result.items.filter((n) => !n.pinned);
-    expect(unpinned[unpinned.length - 1].title).toBe('Copy of second');
+    // Use 'newest' sort: duplicate has the highest createdAt so it sorts first.
+    const resultNewest = store.list(1, 10, undefined, undefined, 'newest');
+    const unpinnedNewest = resultNewest.items.filter((n) => !n.pinned);
+    expect(unpinnedNewest[0].title).toBe('Copy of second');
+    // Verify with 'oldest' sort: duplicate sorts last.
+    const resultOldest = store.list(1, 10, undefined, undefined, 'oldest');
+    const unpinnedOldest = resultOldest.items.filter((n) => !n.pinned);
+    expect(unpinnedOldest[unpinnedOldest.length - 1].title).toBe('Copy of second');
   });
 });
 
