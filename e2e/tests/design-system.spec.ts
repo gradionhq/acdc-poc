@@ -56,8 +56,10 @@ test('Button variants render with correct accessible roles', async ({ page }) =>
   // Danger button is in the overflow menu — open it first
   await openOverflowMenu(item);
   await expect(item.getByRole('menuitem', { name: /^delete/i })).toBeVisible();
-  // Close overflow by pressing Escape before the clean up step
-  await item.page().keyboard.press('Escape');
+  // Close overflow by clicking the toggle button again (Escape does not close it
+  // because the More-actions button is outside the menu div's keydown listener).
+  await openOverflowMenu(item);
+  await expect(item.getByRole('menuitem', { name: /^delete/i })).toHaveCount(0);
 
   // Clean up — delete the note
   await confirmDeleteNote(item, /^delete/i);
