@@ -372,6 +372,13 @@ describe('NoteStore — duplicate()', () => {
     const unpinnedOldest = resultOldest.items.filter((n) => !n.pinned);
     expect(unpinnedOldest[unpinnedOldest.length - 1].title).toBe('Copy of second');
   });
+
+  it('preserves the source note color in the duplicate', () => {
+    const store = new NoteStore();
+    const original = store.create({ title: 't', body: 'b', color: 'blue' });
+    const copy = store.duplicate(original.id);
+    expect(copy!.color).toBe('blue');
+  });
 });
 
 describe('NoteStore — reset()', () => {

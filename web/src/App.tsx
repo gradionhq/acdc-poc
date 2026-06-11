@@ -123,51 +123,56 @@ export function App() {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
     try {
-      await createNote({ title, body, tags: parseTags(tagsInput), color });
+      const created = await createNote({ title, body, tags: parseTags(tagsInput), color });
       setTitle('');
       setBody('');
       setTagsInput('');
       setColor('none');
       setError(null);
       addToast('Note created', 'success');
-      // If a search filter is active, clear it before navigating so the new
-      // note is always visible. With a filter active, `total` reflects only
-      // the filtered count; the new note may not match the query, so
-      // navigating to the target page of the unfiltered results would not show it.
-      // Fetch the real (unfiltered) total to compute the correct destination page.
-      const unfilteredTotal = query !== '' ? (await listNotes(1, 1, '')).total : total;
-      if (query !== '') {
+      // Clear any active filters (search query and tag filter) before navigating
+      // so the new note — which typically won't match the active filters — is
+      // always visible after creation.
+      const hadQuery = query !== '';
+      const hadTagFilter = tagFilter !== '';
+      if (hadQuery) {
         // Signal the debounce effect to skip its setPage(1) reset; onSubmit
         // will set the correct page directly after clearing the search.
         skipDebouncePageResetRef.current = true;
         setSearchInput('');
         setQuery('');
       }
+      if (hadTagFilter) {
+        setTagFilter('');
+      }
+      // Fetch the real (unfiltered) total to compute the correct destination page.
+      const unfilteredTotal = hadQuery || hadTagFilter ? (await listNotes(1, 1, '')).total : total;
       const newTotal = unfilteredTotal + 1;
       // Navigate to the page where the newly created note will appear.
       if (sort === 'oldest') {
         // oldest: the new note always sorts last → last page.
         const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-        if (page === lastPage && query === '') {
-          await refresh(lastPage, '', tagFilter, sort);
+        if (page === lastPage && !hadQuery && !hadTagFilter) {
+          await refresh(lastPage, '', '', sort);
         } else {
           setPage(lastPage);
         }
       } else if (sort === 'newest') {
         // newest: the new note always sorts first → page 1.
-        if (page === 1 && query === '') {
-          await refresh(1, '', tagFilter, sort);
+        if (page === 1 && !hadQuery && !hadTagFilter) {
+          await refresh(1, '', '', sort);
         } else {
           setPage(1);
         }
       } else {
         // title: the new note's page depends on its alphabetical rank among
-        // all (unfiltered) notes. Fetch the full sorted list to find its position.
-        const fullPage = await listNotes(1, newTotal, '', tagFilter, 'title');
-        const rank = fullPage.notes.findIndex((n) => n.title === title) + 1;
+        // all (unfiltered) notes. Use the returned id to avoid mis-navigation
+        // when another note already has the same title.
+        const fullPage = await listNotes(1, newTotal, '', '', 'title');
+        const rank = fullPage.notes.findIndex((n) => n.id === created.id) + 1;
         const dest = rank > 0 ? Math.ceil(rank / PAGE_SIZE) : 1;
-        if (page === dest && query === '') {
-          await refresh(dest, '', tagFilter, sort);
+        if (page === dest && !hadQuery && !hadTagFilter) {
+          await refresh(dest, '', '', sort);
         } else {
           setPage(dest);
         }

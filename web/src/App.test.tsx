@@ -523,11 +523,46 @@ describe('App', () => {
     // Start with 5 notes whose titles sort before 'Zebra' alphabetically so
     // that a new note with title 'Zebra' lands on page 2 under title sort.
     const initialNotes = [
-      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false, color: 'none' as NoteColor },
-      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false, color: 'none' as NoteColor },
-      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false, color: 'none' as NoteColor },
-      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false, color: 'none' as NoteColor },
-      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false, color: 'none' as NoteColor },
+      {
+        id: '1',
+        title: 'Apple',
+        body: 'b',
+        tags: [] as string[],
+        pinned: false,
+        color: 'none' as NoteColor,
+      },
+      {
+        id: '2',
+        title: 'Banana',
+        body: 'b',
+        tags: [] as string[],
+        pinned: false,
+        color: 'none' as NoteColor,
+      },
+      {
+        id: '3',
+        title: 'Cherry',
+        body: 'b',
+        tags: [] as string[],
+        pinned: false,
+        color: 'none' as NoteColor,
+      },
+      {
+        id: '4',
+        title: 'Date',
+        body: 'b',
+        tags: [] as string[],
+        pinned: false,
+        color: 'none' as NoteColor,
+      },
+      {
+        id: '5',
+        title: 'Elderberry',
+        body: 'b',
+        tags: [] as string[],
+        pinned: false,
+        color: 'none' as NoteColor,
+      },
     ];
     const notes = [...initialNotes];
     let nextId = 6;
