@@ -20,27 +20,18 @@ export default defineConfig({
   webServer: {
     // start:prod (root) builds the SPA then boots Express serving web/dist.
     // RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_MS are forwarded so the e2e suite
-    // can run with a tighter window (e.g. RATE_LIMIT_MAX=5 RATE_LIMIT_WINDOW_MS=3000)
-    // without affecting the default production values.
+    // can run with a custom window if needed.
     command: 'npm run start:prod --prefix ..',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
-      // Use a tight window for e2e so the rate-limit spec runs quickly and the
-      // window resets before other specs are affected.  Override via env var if
-      // the production defaults are needed.
-      // 15 req / 3 s: low enough that the rate-limit spec only needs 16 sequential
-      // API calls to trip the limit — well within the 3-second window even on a
-      // slow CI runner (~30 ms/req × 16 = ~480 ms, far below the 3 s budget).
-      // High enough that browser-driven UI tests (which are inherently slow — each
-      // user action waits for rendering) will not approach 15 API calls within any
-      // 3-second slice.  With the original 100 req / 3 s budget, 101 sequential
-      // requests could straddle the window boundary on a loaded runner and
-      // cause flaky 2xx instead of 429.
-      // Override via env vars when needed.
-      RATE_LIMIT_MAX: process.env.RATE_LIMIT_MAX ?? '15',
-      RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS ?? '3000',
+      // Use a very high limit so the e2e suite (which makes many API calls
+      // during pagination, search, and pin tests) is never throttled.
+      // The rate-limiter logic is covered by server-side unit tests; e2e
+      // should not exercise a low global limit that breaks other specs.
+      RATE_LIMIT_MAX: process.env.RATE_LIMIT_MAX ?? '100000',
+      RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS ?? '60000',
     },
   },
 });

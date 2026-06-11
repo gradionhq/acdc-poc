@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { NoteStore } from './store.js';
 import { createNotesRouter } from './notes.js';
+import { createHealthRouter } from './health.js';
+import { createOpenApiRouter } from './openapi.js';
 import { requestLogger } from './logger.js';
 import { createRateLimiter } from './rateLimiter.js';
 
@@ -21,15 +23,14 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
   app.use(requestLogger);
 
   // Rate limiting — applied to /api/* only (static assets are not subject to limits).
-  // GET /api/health is exempt from rate limiting.
+  // GET /api/health is exempt from rate limiting (see exemptPaths in rateLimiter.ts).
   app.use('/api', createRateLimiter());
 
   app.use(express.json());
 
-  // Health check — exempt from rate limiting.
-  app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }));
-
   // API first.
+  app.use('/api/health', createHealthRouter());
+  app.use('/api/openapi.json', createOpenApiRouter());
   app.use('/api/notes', createNotesRouter(store));
   // Any other /api/* is a JSON 404 — never the SPA fallback.
   app.use('/api', (_req: Request, res: Response) => res.status(404).json({ error: 'not found' }));
@@ -39,7 +40,7 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        res.status(400).json({ error: 'file too large' });
+        res.status(413).json({ error: 'file too large' });
         return;
       }
       res.status(400).json({ error: err.message });

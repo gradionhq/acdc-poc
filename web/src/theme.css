@@ -1,0 +1,146 @@
+/*
+ * CSS custom properties for light / dark themes.
+ * The root element receives data-theme="light" or data-theme="dark".
+ * On first load the JS reads prefers-color-scheme to pick the default.
+ */
+
+:root,
+[data-theme='light'] {
+  --color-bg: #ffffff;
+  --color-surface: #f5f5f5;
+  --color-text: #111111;
+  --color-text-muted: #555555;
+  --color-border: #cccccc;
+  --color-primary: #0066cc;
+  --color-primary-hover: #0052a3;
+  --color-danger: #cc0000;
+  --color-btn-bg: #e8e8e8;
+  --color-btn-text: #111111;
+  --color-input-bg: #ffffff;
+  --color-input-text: #111111;
+  --color-alert: #cc0000;
+}
+
+[data-theme='dark'] {
+  --color-bg: #121212;
+  --color-surface: #1e1e1e;
+  --color-text: #e8e8e8;
+  --color-text-muted: #aaaaaa;
+  --color-border: #444444;
+  --color-primary: #4da6ff;
+  --color-primary-hover: #80c0ff;
+  --color-danger: #ff6b6b;
+  --color-btn-bg: #2c2c2c;
+  --color-btn-text: #e8e8e8;
+  --color-input-bg: #1e1e1e;
+  --color-input-text: #e8e8e8;
+  --color-alert: #ff6b6b;
+}
+
+/* Base element styles using custom properties */
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+button {
+  background-color: var(--color-btn-bg);
+  color: var(--color-btn-text);
+  border: 1px solid var(--color-border);
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+button:hover:not(:disabled) {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input,
+textarea {
+  background-color: var(--color-input-bg);
+  color: var(--color-input-text);
+  border: 1px solid var(--color-border);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+p[role='alert'] {
+  color: var(--color-alert);
+}
+
+/* Layout */
+main {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+header h1 {
+  margin: 0;
+}
+
+/* Theme toggle button — distinct style so it stands out */
+.theme-toggle {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 1.1rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 20px;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.theme-toggle:hover {
+  background-color: var(--color-primary);
+  color: #ffffff;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+}
+
+li {
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+}
+
+nav[aria-label='Pagination'] {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

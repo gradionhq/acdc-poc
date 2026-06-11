@@ -11,6 +11,8 @@ import {
   type AttachmentMeta,
   type Note,
 } from './api';
+import { useTheme } from './useTheme';
+import './theme.css';
 
 const PAGE_SIZE = 5;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -28,6 +30,7 @@ function parseTags(raw: string): string[] {
 }
 
 export function App() {
+  const { theme, toggleTheme } = useTheme();
   const [notes, setNotes] = useState<Note[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -228,7 +231,16 @@ export function App() {
 
   return (
     <main>
-      <h1>Notes</h1>
+      <header>
+        <h1>Notes</h1>
+        <button
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="theme-toggle"
+          onClick={toggleTheme}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+      </header>
       {error && <p role="alert">{error}</p>}
       <label>
         Search
