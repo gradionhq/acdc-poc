@@ -169,6 +169,60 @@ describe('NoteStore', () => {
   });
 });
 
+describe('NoteStore — deleteAttachment()', () => {
+  it('returns undefined when the note does not exist', () => {
+    const store = new NoteStore();
+    expect(store.deleteAttachment('no-such', 'file.txt')).toBeUndefined();
+  });
+
+  it('returns false when the attachment does not exist on a valid note', () => {
+    const store = new NoteStore();
+    const note = store.create({ title: 't', body: 'b' });
+    expect(store.deleteAttachment(note.id, 'ghost.txt')).toBe(false);
+  });
+
+  it('returns true and removes the attachment', () => {
+    const store = new NoteStore();
+    const note = store.create({ title: 't', body: 'b' });
+    store.addAttachment(note.id, {
+      filename: 'del.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('x'),
+    });
+
+    expect(store.deleteAttachment(note.id, 'del.txt')).toBe(true);
+    expect(store.listAttachments(note.id)).toEqual([]);
+  });
+
+  it('does not affect other attachments on the same note', () => {
+    const store = new NoteStore();
+    const note = store.create({ title: 't', body: 'b' });
+    store.addAttachment(note.id, {
+      filename: 'keep.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('keep'),
+    });
+    store.addAttachment(note.id, {
+      filename: 'remove.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('remove'),
+    });
+
+    store.deleteAttachment(note.id, 'remove.txt');
+
+    const list = store.listAttachments(note.id);
+    expect(list).toHaveLength(1);
+    expect(list![0].filename).toBe('keep.txt');
+  });
+
+  it('sanitises path traversal in filename before lookup', () => {
+    const store = new NoteStore();
+    const note = store.create({ title: 't', body: 'b' });
+    // Traversal attempt must not blow up — just return false (not found)
+    expect(store.deleteAttachment(note.id, '../../etc/passwd')).toBe(false);
+  });
+});
+
 describe('NoteStore — reset()', () => {
   it('empties notes and attachments and resets the id sequence', () => {
     const store = new NoteStore();

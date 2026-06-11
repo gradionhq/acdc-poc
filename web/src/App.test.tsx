@@ -69,6 +69,23 @@ function mockFetchSequence() {
         return new Response(JSON.stringify(metas), { status: 200 });
       }
 
+      // DELETE /api/notes/:id/attachments/:filename
+      if (init?.method === 'DELETE' && /\/api\/notes\/[^/]+\/attachments\/[^/]+$/.test(urlStr)) {
+        const parts = urlStr.split('/');
+        const noteId = parts.at(-3) ?? '';
+        const filename = decodeURIComponent(parts.at(-1) ?? '');
+        if (!notes.find((n) => n.id === noteId)) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        const atts = attachmentStore[noteId] ?? [];
+        const idx = atts.findIndex((a) => a.filename === filename);
+        if (idx === -1) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        atts.splice(idx, 1);
+        return new Response(null, { status: 204 });
+      }
+
       if (init?.method === 'PATCH' && /\/api\/notes\/[^/]+\/pin$/.test(urlStr)) {
         const noteId = urlStr.split('/').at(-2) ?? '';
         const idx = notes.findIndex((n) => n.id === noteId);
@@ -651,6 +668,91 @@ describe('App — attachments', () => {
 
     await waitFor(() => expect(screen.getByText('hello.txt')).toBeInTheDocument());
     expect(screen.queryByText(/no attachments yet/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a Delete button for each attachment', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Delete btn note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Delete btn note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /attachments for delete btn note/i }));
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    const file = new File(['x'], 'btn-test.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for delete btn note/i);
+    await userEvent.upload(uploadInput, file);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /delete attachment btn-test\.txt/i }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it('deletes an attachment after confirmation and removes it from the list', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Del att note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Del att note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /attachments for del att note/i }));
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    // Upload two attachments
+    const fileA = new File(['a'], 'alpha.txt', { type: 'text/plain' });
+    const fileB = new File(['b'], 'beta.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for del att note/i);
+
+    await userEvent.upload(uploadInput, fileA);
+    await waitFor(() => expect(screen.getByText('alpha.txt')).toBeInTheDocument());
+
+    await userEvent.upload(uploadInput, fileB);
+    await waitFor(() => expect(screen.getByText('beta.txt')).toBeInTheDocument());
+
+    // Delete alpha.txt
+    await userEvent.click(screen.getByRole('button', { name: /delete attachment alpha\.txt/i }));
+
+    // alpha.txt gone, beta.txt remains
+    await waitFor(() => expect(screen.queryByText('alpha.txt')).not.toBeInTheDocument());
+    expect(screen.getByText('beta.txt')).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('does not delete when confirmation is cancelled', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => false),
+    );
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Cancel del note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Cancel del note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /attachments for cancel del note/i }));
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    const file = new File(['x'], 'nodelet.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for cancel del note/i);
+    await userEvent.upload(uploadInput, file);
+    await waitFor(() => expect(screen.getByText('nodelet.txt')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /delete attachment nodelet\.txt/i }));
+
+    // File should still be present
+    expect(screen.getByText('nodelet.txt')).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
   });
 });
 

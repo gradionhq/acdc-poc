@@ -136,3 +136,10 @@ export async function listAttachments(noteId: string): Promise<AttachmentMeta[]>
 export function attachmentDownloadUrl(noteId: string, filename: string): string {
   return `${base}/${noteId}/attachments/${encodeURIComponent(filename)}`;
 }
+
+export async function deleteAttachment(noteId: string, filename: string): Promise<void> {
+  const res = await fetch(`${base}/${noteId}/attachments/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok && res.status !== 404) throw new Error('failed to delete attachment');
+}

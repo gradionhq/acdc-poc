@@ -162,6 +162,17 @@ export class NoteStore {
     return this.attachments.get(`${noteId}/${safeName}`);
   }
 
+  /**
+   * Delete a single attachment from a note.
+   * Returns `true` if deleted, `false` if the note exists but the attachment
+   * does not, and `undefined` if the note itself does not exist.
+   */
+  deleteAttachment(noteId: string, filename: string): boolean | undefined {
+    if (!this.notes.has(noteId)) return undefined;
+    const safeName = this.sanitiseFilename(filename);
+    return this.attachments.delete(`${noteId}/${safeName}`);
+  }
+
   listAttachments(noteId: string): AttachmentMeta[] | undefined {
     if (!this.notes.has(noteId)) return undefined;
     const prefix = `${noteId}/`;

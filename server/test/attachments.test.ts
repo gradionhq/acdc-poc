@@ -271,3 +271,90 @@ describe('attachment list', () => {
     expect(res.body).toEqual({ error: 'not found' });
   });
 });
+
+describe('attachment delete', () => {
+  it('deletes an attachment and returns 204', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .attach('file', Buffer.from('bye'), { filename: 'bye.txt', contentType: 'text/plain' })
+      .expect(201);
+
+    await request(app).delete(`/api/notes/${id}/attachments/bye.txt`).expect(204);
+
+    // The attachment should no longer appear in the list
+    const list = await request(app).get(`/api/notes/${id}/attachments`).expect(200);
+    expect(list.body).toEqual([]);
+  });
+
+  it('returns 404 when deleting a non-existent attachment', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    const res = await request(app).delete(`/api/notes/${id}/attachments/ghost.txt`).expect(404);
+    expect(res.body).toEqual({ error: 'not found' });
+  });
+
+  it('returns 404 when deleting an attachment for an unknown note', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .delete('/api/notes/no-such-note/attachments/file.txt')
+      .expect(404);
+    expect(res.body).toEqual({ error: 'not found' });
+  });
+
+  it('does not affect other attachments on the same note', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+
+    await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .attach('file', Buffer.from('keep'), { filename: 'keep.txt', contentType: 'text/plain' })
+      .expect(201);
+    await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .attach('file', Buffer.from('remove'), { filename: 'remove.txt', contentType: 'text/plain' })
+      .expect(201);
+
+    await request(app).delete(`/api/notes/${id}/attachments/remove.txt`).expect(204);
+
+    const list = await request(app).get(`/api/notes/${id}/attachments`).expect(200);
+    expect(list.body).toHaveLength(1);
+    expect((list.body as Array<{ filename: string }>)[0].filename).toBe('keep.txt');
+  });
+
+  it('does not affect the note text content when deleting an attachment', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .attach('file', Buffer.from('data'), { filename: 'data.txt', contentType: 'text/plain' })
+      .expect(201);
+
+    await request(app).delete(`/api/notes/${id}/attachments/data.txt`).expect(204);
+
+    const note = await request(app).get(`/api/notes/${id}`).expect(200);
+    expect((note.body as { title: string }).title).toBe('attachment test note');
+    expect((note.body as { body: string }).body).toBe('body');
+  });
+
+  it('sanitises path traversal attempts in the delete filename param', async () => {
+    const app = createApp();
+    const id = await seedNote(app);
+    // Upload as a safe name, then try to delete via a traversal path
+    await request(app)
+      .post(`/api/notes/${id}/attachments`)
+      .attach('file', Buffer.from('x'), { filename: 'safe.txt', contentType: 'text/plain' })
+      .expect(201);
+
+    // Traversal attempt should resolve to the sanitised key or 404 — never a server error
+    const res = await request(app)
+      .delete(`/api/notes/${id}/attachments/../../etc/passwd`)
+      .expect(404);
+    expect(res.body).toEqual({ error: 'not found' });
+
+    // The original file must still exist
+    const list = await request(app).get(`/api/notes/${id}/attachments`).expect(200);
+    expect(list.body).toHaveLength(1);
+  });
+});
