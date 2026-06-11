@@ -13,6 +13,7 @@ import {
 } from './api';
 import { Button } from './components/Button';
 import { useTheme } from './useTheme';
+import { countWords, countChars } from './wordCount';
 import styles from './App.module.css';
 
 const PAGE_SIZE = 5;
@@ -295,6 +296,10 @@ export function App() {
               onChange={(e) => setBody(e.target.value)}
             />
           </label>
+          <p aria-live="polite" className={styles.wordCount}>
+            {countWords(body)} {countWords(body) === 1 ? 'word' : 'words'}, {countChars(body)}{' '}
+            {countChars(body) === 1 ? 'character' : 'characters'}
+          </p>
           <label className={styles.fieldLabel}>
             Tags
             <input
