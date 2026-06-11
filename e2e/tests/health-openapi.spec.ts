@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 
 test.describe('Health and OpenAPI endpoints', () => {
   test('GET /api/health returns 200 with status ok and numeric uptime', async ({ request }) => {

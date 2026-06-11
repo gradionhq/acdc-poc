@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 
 // Helper: get the value of data-theme on <html>
 async function getTheme(page: import('@playwright/test').Page): Promise<string | null> {

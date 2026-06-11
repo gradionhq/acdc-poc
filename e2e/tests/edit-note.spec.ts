@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 
 test('create then edit a note and see updated text', async ({ page }) => {
   const title = `[edit-e2e] note-${Date.now()}`;

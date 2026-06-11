@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 
 // Creates `count` notes with unique titles and returns them.
 async function seedNotes(page: import('@playwright/test').Page, count: number): Promise<string[]> {
