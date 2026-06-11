@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { HelpCircle, Moon, Sun, Tag, X } from 'lucide-react';
 import { Button } from './Button';
 import { TagManager } from '../TagManager';
 import { SHORTCUTS } from '../useKeyboardShortcuts';
@@ -41,7 +42,7 @@ export function Header({
             className={styles.iconButton}
             onClick={onToggleHelp}
           >
-            ?
+            <HelpCircle size={18} aria-hidden="true" />
           </button>
           <Button
             variant="secondary"
@@ -49,6 +50,7 @@ export function Header({
             aria-expanded={showTagManager}
             aria-controls="tag-manager-panel"
           >
+            <Tag size={15} aria-hidden="true" className={styles.btnIcon} />
             {showTagManager ? 'Hide tag manager' : 'Manage tags'}
           </Button>
           <button
@@ -56,7 +58,11 @@ export function Header({
             className="theme-toggle"
             onClick={toggleTheme}
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
+            {theme === 'dark' ? (
+              <Sun size={18} aria-hidden="true" />
+            ) : (
+              <Moon size={18} aria-hidden="true" />
+            )}
           </button>
         </div>
       </header>
@@ -76,7 +82,7 @@ export function Header({
               className={styles.iconButton}
               onClick={onCloseHelp}
             >
-              ✕
+              <X size={16} aria-hidden="true" />
             </button>
           </div>
           <ul className={styles.shortcutList}>

@@ -27,13 +27,27 @@
   width: 90%;
 }
 
+/* ── Title row (icon + heading) ───────────────────────────────── */
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.warningIcon {
+  flex-shrink: 0;
+  color: var(--color-danger);
+}
+
 /* ── Title ────────────────────────────────────────────────────── */
 
 .title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
-  margin: 0 0 var(--space-3);
+  margin: 0;
 }
 
 /* ── Message ──────────────────────────────────────────────────── */

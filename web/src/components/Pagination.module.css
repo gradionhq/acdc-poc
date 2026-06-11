@@ -20,6 +20,10 @@
   white-space: nowrap;
 }
 
+.chevron {
+  flex-shrink: 0;
+}
+
 /* ── Responsive overrides — ≤ 480 px ─────────────────────────── */
 
 @media (max-width: 480px) {

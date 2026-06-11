@@ -66,6 +66,18 @@
   border-left: 3px solid var(--color-danger);
 }
 
+.toast__icon {
+  flex-shrink: 0;
+}
+
+.toast__icon--success {
+  color: var(--color-primary);
+}
+
+.toast__icon--error {
+  color: var(--color-danger);
+}
+
 .toast__message {
   flex: 1;
   font-size: var(--font-size-sm);
