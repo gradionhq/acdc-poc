@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, confirmDeleteNote } from '../fixtures';
 
 /**
  * Toast notifications e2e spec.
@@ -48,8 +48,8 @@ test('delete a note — success toast appears', async ({ page }) => {
     await page.getByRole('button', { name: /dismiss notification: note created/i }).click();
   }
 
-  // Delete the note
-  await item.getByRole('button', { name: new RegExp(`^delete ${token}$`, 'i') }).click();
+  // Delete the note (opens confirm dialog; confirm it)
+  await confirmDeleteNote(item, new RegExp(`^delete ${token}$`, 'i'));
 
   // Delete success toast must appear
   await expect(page.getByText('Note deleted')).toBeVisible();

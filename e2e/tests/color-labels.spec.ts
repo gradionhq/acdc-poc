@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, confirmDeleteNote } from '../fixtures';
 
 test('two notes with different colors show the correct visual accent', async ({ page }) => {
   const titleRed = `[color-e2e] red-${Date.now()}`;
@@ -36,11 +36,9 @@ test('two notes with different colors show the correct visual accent', async ({ 
 
   // Clean up
   if (await blueItem.isVisible()) {
-    await blueItem.getByRole('button', { name: /delete/i }).click();
-    await expect(blueItem).toHaveCount(0);
+    await confirmDeleteNote(blueItem, /delete/i);
   }
   if (await redItem.isVisible()) {
-    await redItem.getByRole('button', { name: /delete/i }).click();
-    await expect(redItem).toHaveCount(0);
+    await confirmDeleteNote(redItem, /delete/i);
   }
 });

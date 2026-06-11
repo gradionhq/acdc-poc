@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, confirmDeleteNote } from '../fixtures';
 import { Buffer } from 'node:buffer';
 
 test('attach a file to a note and download it', async ({ page }) => {
@@ -46,6 +46,6 @@ test('attach a file to a note and download it', async ({ page }) => {
   expect(downloaded).toBe(fileContent);
 
   // Clean up: delete the note so it doesn't pollute other test runs
-  await item.getByRole('button', { name: /^delete \[attach-e2e\]/i }).click();
+  await confirmDeleteNote(item, /^delete \[attach-e2e\]/i);
   await expect(item).toHaveCount(0);
 });

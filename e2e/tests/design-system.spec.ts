@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, confirmDeleteNote } from '../fixtures';
 
 /**
  * Design-system e2e spec.
@@ -57,7 +57,7 @@ test('Button variants render with correct accessible roles', async ({ page }) =>
   await expect(item.getByRole('button', { name: /^delete/i })).toBeVisible();
 
   // Clean up — delete the note
-  await item.getByRole('button', { name: /^delete/i }).click();
+  await confirmDeleteNote(item, /^delete/i);
   await expect(item).toHaveCount(0);
 });
 

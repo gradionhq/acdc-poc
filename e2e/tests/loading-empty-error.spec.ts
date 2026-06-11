@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, confirmDeleteNote } from '../fixtures';
 
 /**
  * E2E tests for loading skeleton, empty state, and error banner.
@@ -130,7 +130,7 @@ test('empty state disappears after creating the first note', async ({ page }) =>
 
   // Clean up: delete the note
   const item = page.getByRole('listitem').filter({ hasText: newNoteTitle });
-  await item.getByRole('button', { name: /delete/i }).click();
+  await confirmDeleteNote(item);
   await expect(item).toHaveCount(0);
   await searchBoxAfter.clear();
 });

@@ -1,0 +1,54 @@
+/*
+ * ConfirmDialog styles — CSS Module.
+ * All values reference design-system tokens; no magic numbers.
+ */
+
+/* ── Backdrop ─────────────────────────────────────────────────── */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgb(0 0 0 / 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+/* ── Dialog panel ─────────────────────────────────────────────── */
+
+.dialog {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-6);
+  max-width: 28rem;
+  width: 90%;
+}
+
+/* ── Title ────────────────────────────────────────────────────── */
+
+.title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  margin: 0 0 var(--space-3);
+}
+
+/* ── Message ──────────────────────────────────────────────────── */
+
+.message {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-6);
+  line-height: var(--line-height-normal);
+}
+
+/* ── Actions row ──────────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}

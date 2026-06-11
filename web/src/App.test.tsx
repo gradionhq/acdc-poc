@@ -244,8 +244,59 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Temp note')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: /delete/i }));
+    // Click delete — a confirm dialog should appear.
+    await userEvent.click(screen.getByRole('button', { name: /^delete temp note$/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Confirm deletion in the dialog.
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }));
     await waitFor(() => expect(screen.queryByText('Temp note')).not.toBeInTheDocument());
+  });
+
+  it('clicking delete opens confirm dialog and cancel does NOT delete the note', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/title/i), 'Keep me note');
+    await userEvent.type(screen.getByLabelText(/body/i), 'please keep');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Keep me note')).toBeInTheDocument());
+
+    // Click delete — dialog opens.
+    await userEvent.click(screen.getByRole('button', { name: /^delete keep me note$/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Click cancel — note should still be present and dialog should be gone.
+    await userEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Keep me note')).toBeInTheDocument();
+  });
+
+  it('pressing Escape in the confirm dialog cancels deletion', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/title/i), 'Escape test note');
+    await userEvent.type(screen.getByLabelText(/body/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Escape test note')).toBeInTheDocument());
+
+    // Open dialog.
+    await userEvent.click(screen.getByRole('button', { name: /^delete escape test note$/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Press Escape to cancel.
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Escape test note')).toBeInTheDocument();
+  });
+
+  it('confirm dialog names the note being deleted', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/title/i), 'My named note');
+    await userEvent.type(screen.getByLabelText(/body/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('My named note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /^delete my named note$/i }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toMatch(/My named note/);
   });
 
   it('edits a note and shows the updated text in the list', async () => {

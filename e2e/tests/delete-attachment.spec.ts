@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, confirmDeleteNote } from '../fixtures';
 import { Buffer } from 'node:buffer';
 
 test('upload two attachments, delete one, assert only the other remains', async ({ page }) => {
@@ -50,6 +50,6 @@ test('upload two attachments, delete one, assert only the other remains', async 
   await expect(item.getByRole('link', { name: /keep-me\.txt/i })).toBeVisible();
 
   // Clean up
-  await item.getByRole('button', { name: /^delete \[delete-att-e2e\]/i }).click();
+  await confirmDeleteNote(item, /^delete \[delete-att-e2e\]/i);
   await expect(item).toHaveCount(0);
 });

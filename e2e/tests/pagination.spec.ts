@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, confirmDeleteNote } from '../fixtures';
 
 // Creates `count` notes with unique titles and returns them.
 async function seedNotes(page: import('@playwright/test').Page, count: number): Promise<string[]> {
@@ -75,7 +75,7 @@ test('pagination: next/prev controls work across multiple pages', async ({ page 
     for (const title of [...remaining]) {
       const item = page.getByRole('listitem').filter({ hasText: title });
       if (await item.isVisible()) {
-        await item.getByRole('button', { name: /delete/i }).click();
+        await confirmDeleteNote(item);
         await expect(item).toHaveCount(0);
         remaining.delete(title);
         deleted = true;

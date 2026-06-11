@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, confirmDeleteNote } from '../fixtures';
 import { Buffer } from 'node:buffer';
 
 test('drag two files onto the dropzone and assert both appear in attachment list', async ({
@@ -48,7 +48,6 @@ test('drag two files onto the dropzone and assert both appear in attachment list
   await expect(item.getByRole('link', { name: /drag-file-two\.txt/i })).toBeVisible();
   await expect(item.getByText(/no attachments yet/i)).toHaveCount(0);
 
-  // Clean up: delete the note
-  await item.getByRole('button', { name: /^delete \[dnd-attach-e2e\]/i }).click();
-  await expect(item).toHaveCount(0);
+  // Clean up: delete the note via confirm dialog
+  await confirmDeleteNote(item, /^delete \[dnd-attach-e2e\]/i);
 });
