@@ -311,6 +311,194 @@ describe('notes API', () => {
     expect(titles[0]).toBe('second'); // pinned sorts first
     expect(titles[1]).toBe('first');
   });
+
+  it('GET /api/notes?sort=newest returns most-recently-created first', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'first', body: 'b' }).expect(201);
+    await request(app).post('/api/notes').send({ title: 'second', body: 'b' }).expect(201);
+    await request(app).post('/api/notes').send({ title: 'third', body: 'b' }).expect(201);
+
+    const res = await request(app).get('/api/notes?sort=newest').expect(200);
+    const titles = (res.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles).toEqual(['third', 'second', 'first']);
+  });
+
+  it('GET /api/notes?sort=oldest returns earliest-created first', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'first', body: 'b' }).expect(201);
+    await request(app).post('/api/notes').send({ title: 'second', body: 'b' }).expect(201);
+    await request(app).post('/api/notes').send({ title: 'third', body: 'b' }).expect(201);
+
+    const res = await request(app).get('/api/notes?sort=oldest').expect(200);
+    const titles = (res.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles).toEqual(['first', 'second', 'third']);
+  });
+
+  it('GET /api/notes?sort=title returns notes in A→Z order', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'Banana', body: 'b' }).expect(201);
+    await request(app).post('/api/notes').send({ title: 'Apple', body: 'b' }).expect(201);
+    await request(app).post('/api/notes').send({ title: 'Cherry', body: 'b' }).expect(201);
+
+    const res = await request(app).get('/api/notes?sort=title').expect(200);
+    const titles = (res.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles).toEqual(['Apple', 'Banana', 'Cherry']);
+  });
+
+  it('GET /api/notes with invalid sort value returns 400 with descriptive error', async () => {
+    const app = createApp();
+    const res = await request(app).get('/api/notes?sort=random').expect(400);
+    expect(res.body).toEqual({ error: 'sort must be one of: newest, oldest, title' });
+  });
+
+  it('GET /api/notes with array sort param returns 400', async () => {
+    const app = createApp();
+    // ?sort[]=newest is an array — should be rejected
+    const res = await request(app).get('/api/notes?sort[]=newest').expect(400);
+    expect(res.body).toEqual({ error: 'sort must be one of: newest, oldest, title' });
+  });
+
+  it('sort and page params work together (pagination consistent with sort order)', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'Apple', body: 'b' }).expect(201);
+    await request(app).post('/api/notes').send({ title: 'Banana', body: 'b' }).expect(201);
+    await request(app).post('/api/notes').send({ title: 'Cherry', body: 'b' }).expect(201);
+
+    // title sort, pageSize=2: page 1 = Apple+Banana, page 2 = Cherry
+    const page1 = await request(app).get('/api/notes?sort=title&page=1&pageSize=2').expect(200);
+    expect((page1.body as Array<{ title: string }>).map((n) => n.title)).toEqual([
+      'Apple',
+      'Banana',
+    ]);
+    const page2 = await request(app).get('/api/notes?sort=title&page=2&pageSize=2').expect(200);
+    expect((page2.body as Array<{ title: string }>).map((n) => n.title)).toEqual(['Cherry']);
+  });
+
+  it('pinned notes stay first regardless of sort order', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'Zebra', body: 'b' }).expect(201);
+    const apple = await request(app)
+      .post('/api/notes')
+      .send({ title: 'Apple', body: 'b' })
+      .expect(201);
+    // Pin 'Apple' — it should appear first even though 'Zebra' < 'Apple' would
+    // normally be wrong, but here 'Zebra' sorts before 'Apple' alphabetically;
+    // pin makes Apple win regardless.
+    await request(app).patch(`/api/notes/${apple.body.id}/pin`).expect(200);
+
+    const res = await request(app).get('/api/notes?sort=title').expect(200);
+    const titles = (res.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles[0]).toBe('Apple'); // pinned → always first
+  });
+});
+
+describe('POST /api/notes/:id/duplicate', () => {
+  it('returns 404 for an unknown source note id', async () => {
+    const app = createApp();
+    const res = await request(app).post('/api/notes/nope/duplicate').expect(404);
+    expect(res.body).toEqual({ error: 'not found' });
+  });
+
+  it('creates a new note with a distinct id, prefixed title, same body and tags', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'Original', body: 'some body', tags: ['tag1', 'tag2'] })
+      .expect(201);
+
+    const res = await request(app).post(`/api/notes/${created.body.id}/duplicate`).expect(201);
+
+    expect(res.body.id).toBeDefined();
+    expect(res.body.id).not.toBe(created.body.id);
+    expect(res.body.title).toBe('Copy of Original');
+    expect(res.body.body).toBe('some body');
+    expect(res.body.tags).toEqual(['tag1', 'tag2']);
+  });
+
+  it('duplicate is not pinned even when source is pinned', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'Pinned note', body: 'b' })
+      .expect(201);
+    await request(app).patch(`/api/notes/${created.body.id}/pin`).expect(200);
+
+    const res = await request(app).post(`/api/notes/${created.body.id}/duplicate`).expect(201);
+    expect(res.body.pinned).toBe(false);
+  });
+
+  it('duplicate appears in the notes list', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'List note', body: 'b' })
+      .expect(201);
+
+    await request(app).post(`/api/notes/${created.body.id}/duplicate`).expect(201);
+
+    const list = await request(app).get('/api/notes').expect(200);
+    const titles = (list.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles).toContain('List note');
+    expect(titles).toContain('Copy of List note');
+  });
+
+  it('attachments are NOT copied to the duplicate', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'With attach', body: 'b' })
+      .expect(201);
+    // Add an attachment to the original
+    await request(app)
+      .post(`/api/notes/${created.body.id}/attachments`)
+      .attach('file', Buffer.from('hello'), { filename: 'hello.txt', contentType: 'text/plain' })
+      .expect(201);
+
+    const dup = await request(app).post(`/api/notes/${created.body.id}/duplicate`).expect(201);
+
+    const atts = await request(app).get(`/api/notes/${dup.body.id}/attachments`).expect(200);
+    expect(atts.body).toHaveLength(0);
+  });
+});
+
+describe('POST /api/test/reset — guarded reset endpoint', () => {
+  let savedEnv: string | undefined;
+
+  afterEach(() => {
+    // Restore the env variable to what it was before each test
+    if (savedEnv === undefined) {
+      delete process.env.ENABLE_TEST_RESET;
+    } else {
+      process.env.ENABLE_TEST_RESET = savedEnv;
+    }
+  });
+
+  it('returns 204 and clears notes when ENABLE_TEST_RESET=1', async () => {
+    savedEnv = process.env.ENABLE_TEST_RESET;
+    process.env.ENABLE_TEST_RESET = '1';
+
+    const store = new NoteStore();
+    const app = createApp(store);
+
+    // Seed a note
+    await request(app).post('/api/notes').send({ title: 't', body: 'b' }).expect(201);
+
+    // Reset
+    await request(app).post('/api/test/reset').expect(204);
+
+    // List should be empty
+    const res = await request(app).get('/api/notes').expect(200);
+    expect(res.body).toHaveLength(0);
+    expect(res.headers['x-total-count']).toBe('0');
+  });
+
+  it('returns 404 when ENABLE_TEST_RESET is not set', async () => {
+    savedEnv = process.env.ENABLE_TEST_RESET;
+    delete process.env.ENABLE_TEST_RESET;
+
+    const app = createApp();
+    await request(app).post('/api/test/reset').expect(404);
+  });
 });
 
 describe('POST /api/test/reset — guarded reset endpoint', () => {

@@ -24,6 +24,8 @@ export interface NotesPage {
   total: number;
 }
 
+export type SortOrder = 'newest' | 'oldest' | 'title';
+
 const base = '/api/notes';
 
 export async function listNotes(
@@ -31,10 +33,12 @@ export async function listNotes(
   pageSize = 5,
   query?: string,
   tag?: string,
+  sort: SortOrder = 'newest',
 ): Promise<NotesPage> {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
+    sort,
   });
   if (query !== undefined && query !== '') {
     params.set('q', query);
@@ -86,6 +90,14 @@ export async function deleteNote(id: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error('failed to delete note');
 }
 
+export async function duplicateNote(id: string): Promise<Note> {
+  const res = await fetch(`${base}/${id}/duplicate`, { method: 'POST' });
+  if (!res.ok) throw new Error('failed to duplicate note');
+  const created: unknown = await res.json();
+  if (!isNote(created)) throw new Error('invalid note payload');
+  return created;
+}
+
 export async function togglePin(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/pin`, { method: 'PATCH' });
   if (!res.ok) throw new Error('failed to toggle pin');
@@ -135,4 +147,11 @@ export async function listAttachments(noteId: string): Promise<AttachmentMeta[]>
 
 export function attachmentDownloadUrl(noteId: string, filename: string): string {
   return `${base}/${noteId}/attachments/${encodeURIComponent(filename)}`;
+}
+
+export async function deleteAttachment(noteId: string, filename: string): Promise<void> {
+  const res = await fetch(`${base}/${noteId}/attachments/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok && res.status !== 404) throw new Error('failed to delete attachment');
 }

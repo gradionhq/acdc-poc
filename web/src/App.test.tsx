@@ -6,15 +6,6 @@ import { listNotes } from './api';
 
 type MockNote = { id: string; title: string; body: string; tags: string[]; pinned: boolean };
 
-function buildResponse(notes: MockNote[], page = 1, pageSize = 5) {
-  const start = (page - 1) * pageSize;
-  const items = notes.slice(start, start + pageSize);
-  return new Response(JSON.stringify(items), {
-    status: 200,
-    headers: { 'X-Total-Count': String(notes.length) },
-  });
-}
-
 type MockAttachment = { filename: string; contentType: string; size: number; data: string };
 
 function mockFetchSequence() {
@@ -69,6 +60,23 @@ function mockFetchSequence() {
         return new Response(JSON.stringify(metas), { status: 200 });
       }
 
+      // DELETE /api/notes/:id/attachments/:filename
+      if (init?.method === 'DELETE' && /\/api\/notes\/[^/]+\/attachments\/[^/]+$/.test(urlStr)) {
+        const parts = urlStr.split('/');
+        const noteId = parts.at(-3) ?? '';
+        const filename = decodeURIComponent(parts.at(-1) ?? '');
+        if (!notes.find((n) => n.id === noteId)) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        const atts = attachmentStore[noteId] ?? [];
+        const idx = atts.findIndex((a) => a.filename === filename);
+        if (idx === -1) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        atts.splice(idx, 1);
+        return new Response(null, { status: 204 });
+      }
+
       if (init?.method === 'PATCH' && /\/api\/notes\/[^/]+\/pin$/.test(urlStr)) {
         const noteId = urlStr.split('/').at(-2) ?? '';
         const idx = notes.findIndex((n) => n.id === noteId);
@@ -78,6 +86,25 @@ function mockFetchSequence() {
         notes[idx] = { ...notes[idx], pinned: !notes[idx].pinned };
         return new Response(JSON.stringify(notes[idx]), { status: 200 });
       }
+
+      // POST /api/notes/:id/duplicate
+      if (init?.method === 'POST' && /\/api\/notes\/[^/]+\/duplicate$/.test(urlStr)) {
+        const noteId = urlStr.split('/').at(-2) ?? '';
+        const source = notes.find((n) => n.id === noteId);
+        if (!source) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        const copy: MockNote = {
+          id: String(++seq),
+          title: `Copy of ${source.title}`,
+          body: source.body,
+          tags: [...source.tags],
+          pinned: false,
+        };
+        notes.push(copy);
+        return new Response(JSON.stringify(copy), { status: 201 });
+      }
+
       if (init?.method === 'POST') {
         const b = JSON.parse(String(init.body)) as {
           title: string;
@@ -121,21 +148,29 @@ function mockFetchSequence() {
         notes = notes.filter((n) => n.id !== id);
         return new Response(null, { status: 204 });
       }
-      // Parse page/pageSize/q/tag from URL
+      // Parse page/pageSize/q/tag/sort from URL
       const urlObj = new URL(urlStr, 'http://localhost');
       const page = Number(urlObj.searchParams.get('page') ?? '1');
       const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
       const q = urlObj.searchParams.get('q') ?? '';
       const tagParam = urlObj.searchParams.get('tag') ?? '';
+      const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
       const term = q.trim().toLowerCase();
       const tagTerm = tagParam.trim().toLowerCase();
-      const filtered = notes.filter(
-        (n) =>
-          (term === '' ||
-            n.title.toLowerCase().includes(term) ||
-            n.body.toLowerCase().includes(term)) &&
-          (tagTerm === '' || n.tags.some((t) => t.toLowerCase() === tagTerm)),
-      );
+      const filtered = notes
+        .filter(
+          (n) =>
+            (term === '' ||
+              n.title.toLowerCase().includes(term) ||
+              n.body.toLowerCase().includes(term)) &&
+            (tagTerm === '' || n.tags.some((t) => t.toLowerCase() === tagTerm)),
+        )
+        .sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          if (sortParam === 'title') return a.title.localeCompare(b.title);
+          return Number(b.id) - Number(a.id); // newest
+        });
       const start = (page - 1) * pageSize;
       const items = filtered.slice(start, start + pageSize);
       return new Response(JSON.stringify(items), {
@@ -221,6 +256,79 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
   });
 
+  it('error banner shows a Retry button that re-fetches notes', async () => {
+    let callCount = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        callCount += 1;
+        // First call fails; subsequent calls succeed with an empty list
+        if (callCount === 1) {
+          return new Response('nope', { status: 500 });
+        }
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'X-Total-Count': '0' },
+        });
+      }),
+    );
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+    // After retry the error banner should disappear
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
+  it('shows a loading skeleton while fetching notes', async () => {
+    // Never resolves — keeps the app in loading state
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => {})),
+    );
+    render(<App />);
+    expect(screen.getByRole('list', { name: /loading notes/i })).toBeInTheDocument();
+  });
+
+  it('shows empty state when there are no notes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'X-Total-Count': '0' },
+          }),
+      ),
+    );
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(/no notes yet/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /add your first note/i })).toBeInTheDocument();
+  });
+
+  it('empty state does not show when notes exist', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Has notes');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body text');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Has notes')).toBeInTheDocument());
+    expect(screen.queryByText(/no notes yet/i)).not.toBeInTheDocument();
+  });
+
+  it('error message does not expose raw stack traces', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('nope', { status: 500 })),
+    );
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    const alertText = screen.getByRole('alert').textContent ?? '';
+    expect(alertText).not.toMatch(/Error:/);
+    expect(alertText).not.toMatch(/at \w/);
+    expect(alertText).not.toMatch(/\.tsx?:/);
+  });
+
   it('disables Previous on page 1 and enables Next when there are multiple pages', async () => {
     // Pre-populate with 6 notes via mock so total > pageSize (5)
     let notes: Array<{ id: string; title: string; body: string; tags: string[]; pinned: boolean }> =
@@ -259,8 +367,9 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /next/i })).not.toBeDisabled();
   });
 
-  it('new note is visible after create — lands on the last page', async () => {
-    // Start with 5 notes so page 1 is full; creating a 6th pushes it to page 2
+  it('new note is visible after create — default (newest) sort lands on page 1', async () => {
+    // Start with 5 notes so page 1 is full; creating a 6th with newest sort
+    // places the new note at the top of page 1.
     const initialNotes = Array.from({ length: 5 }, (_, i) => ({
       id: String(i + 1),
       title: `Existing ${i + 1}`,
@@ -292,22 +401,164 @@ describe('App', () => {
         const urlObj = new URL(url as string, 'http://localhost');
         const page = Number(urlObj.searchParams.get('page') ?? '1');
         const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
-        return buildResponse(notes, page, pageSize);
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id); // newest
+        });
+        const start = (page - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
       }),
     );
 
     render(<App />);
-    await waitFor(() => expect(screen.getByText('Existing 1')).toBeInTheDocument());
+    // With newest sort, page 1 shows Existing 5 first (highest id)
+    await waitFor(() => expect(screen.getByText('Existing 5')).toBeInTheDocument());
 
-    // Create a 6th note — it lands on page 2
+    // Create a 6th note — with newest sort it surfaces on page 1
     await userEvent.type(screen.getByLabelText(/title/i), 'Sixth note');
-    await userEvent.type(screen.getByLabelText(/body/i), 'last');
+    await userEvent.type(screen.getByLabelText(/body/i), 'latest');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // App must navigate to page 1 where the new note appears first
+    await waitFor(() => expect(screen.getByText('Sixth note')).toBeInTheDocument());
+  });
+
+  it('new note is visible after create — oldest sort lands on the last page', async () => {
+    // Start with 5 notes so page 1 is full; creating a 6th with oldest sort
+    // places the new note at the end (page 2).
+    const initialNotes = Array.from({ length: 5 }, (_, i) => ({
+      id: String(i + 1),
+      title: `OldSort ${i + 1}`,
+      body: `body ${i + 1}`,
+      tags: [] as string[],
+      pinned: false,
+    }));
+    const notes = [...initialNotes];
+    let nextId = initialNotes.length + 1;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          const b = JSON.parse(String(init.body)) as {
+            title: string;
+            body: string;
+            tags?: string[];
+          };
+          const n = {
+            id: String(nextId++),
+            title: b.title,
+            body: b.body,
+            tags: b.tags ?? [],
+            pinned: false,
+          };
+          notes.push(n);
+          return new Response(JSON.stringify(n), { status: 201 });
+        }
+        const urlObj = new URL(url as string, 'http://localhost');
+        const page = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id); // newest
+        });
+        const start = (page - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
+      }),
+    );
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('OldSort 5')).toBeInTheDocument());
+
+    // Switch to oldest sort via the dropdown
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'oldest');
+    await waitFor(() => expect(screen.getByText('OldSort 1')).toBeInTheDocument());
+
+    // Create a 7th note — with oldest sort it goes to the last page (page 2)
+    await userEvent.type(screen.getByLabelText(/title/i), 'Seventh note');
+    await userEvent.type(screen.getByLabelText(/body/i), 'appended');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     // App must navigate to page 2 where the new note is visible
-    await waitFor(() => expect(screen.getByText('Sixth note')).toBeInTheDocument());
-    // Page 1 notes should no longer be shown
-    expect(screen.queryByText('Existing 1')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Seventh note')).toBeInTheDocument());
+    // Page 1 notes (oldest) should no longer be shown
+    expect(screen.queryByText('OldSort 1')).not.toBeInTheDocument();
+  });
+
+  it('new note is visible after create — title sort navigates to the correct page', async () => {
+    // Start with 5 notes whose titles sort before 'Zebra' alphabetically so
+    // that a new note with title 'Zebra' lands on page 2 under title sort.
+    const initialNotes = [
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
+      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
+    ];
+    const notes = [...initialNotes];
+    let nextId = 6;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          const b = JSON.parse(String(init.body)) as {
+            title: string;
+            body: string;
+            tags?: string[];
+          };
+          const n = {
+            id: String(nextId++),
+            title: b.title,
+            body: b.body,
+            tags: b.tags ?? [],
+            pinned: false,
+          };
+          notes.push(n);
+          return new Response(JSON.stringify(n), { status: 201 });
+        }
+        const urlObj = new URL(url as string, 'http://localhost');
+        const p = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'title') return a.title.localeCompare(b.title);
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id); // newest
+        });
+        const start = (p - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
+      }),
+    );
+
+    render(<App />);
+    // Switch to title sort
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'title');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+    // Page 1 under title sort: Apple, Banana, Cherry, Date, Elderberry
+    expect(screen.queryByText('Zebra')).not.toBeInTheDocument();
+
+    // Create a note whose title sorts last alphabetically → should land on page 2
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Zebra');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // App must navigate to page 2 where Zebra appears
+    await waitFor(() => expect(screen.getByText('Zebra')).toBeInTheDocument());
+    // Apple (page 1) should no longer be visible
+    expect(screen.queryByText('Apple')).not.toBeInTheDocument();
   });
 
   it('navigates to next and previous pages', async () => {
@@ -391,6 +642,23 @@ describe('App', () => {
 
     await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'zzznomatch');
     await waitFor(() => expect(screen.queryByText('Unique note')).not.toBeInTheDocument());
+  });
+
+  it('shows "no notes match your search" when filter is active but no results match', async () => {
+    render(<App />);
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Filter test note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'some body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Filter test note')).toBeInTheDocument());
+
+    // Search for something that won't match — should show filter-specific message, not the CTA
+    await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'zzznomatch');
+    await waitFor(() =>
+      expect(screen.getByText(/no notes match your search/i)).toBeInTheDocument(),
+    );
+    // The "Add your first note" CTA must NOT appear when notes exist but filter has no results
+    expect(screen.queryByRole('button', { name: /add your first note/i })).not.toBeInTheDocument();
   });
 
   it('creating a note while a search is active clears the search and shows the new note', async () => {
@@ -652,6 +920,91 @@ describe('App — attachments', () => {
     await waitFor(() => expect(screen.getByText('hello.txt')).toBeInTheDocument());
     expect(screen.queryByText(/no attachments yet/i)).not.toBeInTheDocument();
   });
+
+  it('shows a Delete button for each attachment', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Delete btn note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Delete btn note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /attachments for delete btn note/i }));
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    const file = new File(['x'], 'btn-test.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for delete btn note/i);
+    await userEvent.upload(uploadInput, file);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /delete attachment btn-test\.txt/i }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it('deletes an attachment after confirmation and removes it from the list', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Del att note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Del att note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /attachments for del att note/i }));
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    // Upload two attachments
+    const fileA = new File(['a'], 'alpha.txt', { type: 'text/plain' });
+    const fileB = new File(['b'], 'beta.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for del att note/i);
+
+    await userEvent.upload(uploadInput, fileA);
+    await waitFor(() => expect(screen.getByText('alpha.txt')).toBeInTheDocument());
+
+    await userEvent.upload(uploadInput, fileB);
+    await waitFor(() => expect(screen.getByText('beta.txt')).toBeInTheDocument());
+
+    // Delete alpha.txt
+    await userEvent.click(screen.getByRole('button', { name: /delete attachment alpha\.txt/i }));
+
+    // alpha.txt gone, beta.txt remains
+    await waitFor(() => expect(screen.queryByText('alpha.txt')).not.toBeInTheDocument());
+    expect(screen.getByText('beta.txt')).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('does not delete when confirmation is cancelled', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => false),
+    );
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Cancel del note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Cancel del note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /attachments for cancel del note/i }));
+    await waitFor(() => expect(screen.getByText(/no attachments yet/i)).toBeInTheDocument());
+
+    const file = new File(['x'], 'nodelet.txt', { type: 'text/plain' });
+    const uploadInput = screen.getByLabelText(/upload attachment for cancel del note/i);
+    await userEvent.upload(uploadInput, file);
+    await waitFor(() => expect(screen.getByText('nodelet.txt')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /delete attachment nodelet\.txt/i }));
+
+    // File should still be present
+    expect(screen.getByText('nodelet.txt')).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('attachment mock — 404 contract', () => {
@@ -679,6 +1032,46 @@ describe('attachment mock — 404 contract', () => {
   it('returns 404 for GET attachments on a valid-looking but non-existent numeric note id', async () => {
     const res = await fetch('/api/notes/99999/attachments');
     expect(res.status).toBe(404);
+  });
+});
+
+describe('App — word/character count', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('shows "0 words, 0 characters" initially when body is empty', async () => {
+    render(<App />);
+    expect(screen.getByText('0 words, 0 characters')).toBeInTheDocument();
+  });
+
+  it('updates word and character count as user types in the body field', async () => {
+    render(<App />);
+    const bodyInput = screen.getByLabelText(/^body$/i);
+    await userEvent.type(bodyInput, 'hello world');
+    expect(screen.getByText('2 words, 11 characters')).toBeInTheDocument();
+  });
+
+  it('uses singular "word" when count is 1', async () => {
+    render(<App />);
+    const bodyInput = screen.getByLabelText(/^body$/i);
+    await userEvent.type(bodyInput, 'hello');
+    expect(screen.getByText('1 word, 5 characters')).toBeInTheDocument();
+  });
+
+  it('uses singular "character" when count is 1', async () => {
+    render(<App />);
+    const bodyInput = screen.getByLabelText(/^body$/i);
+    await userEvent.type(bodyInput, 'a');
+    expect(screen.getByText('1 word, 1 character')).toBeInTheDocument();
+  });
+
+  it('resets count to 0 after note is submitted', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'My note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'hello world');
+    expect(screen.getByText('2 words, 11 characters')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('My note')).toBeInTheDocument());
+    expect(screen.getByText('0 words, 0 characters')).toBeInTheDocument();
   });
 });
 
@@ -829,5 +1222,551 @@ describe('App — dark mode toggle', () => {
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     expect(localStorage.getItem('theme')).toBe('light');
+  });
+});
+
+describe('App — duplicate', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('shows a Duplicate button for each note', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Dup me');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Dup me')).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: /duplicate dup me/i })).toBeInTheDocument();
+  });
+
+  it('clicking Duplicate creates a copy with prefixed title in the list', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Original note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'the body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Original note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /duplicate original note/i }));
+    await waitFor(() => expect(screen.getByText('Copy of Original note')).toBeInTheDocument());
+  });
+
+  it('the copy and the original are independent — editing one does not affect the other', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Source');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Source')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /duplicate source/i }));
+    await waitFor(() => expect(screen.getByText('Copy of Source')).toBeInTheDocument());
+
+    // Edit the original
+    await userEvent.click(screen.getByRole('button', { name: /^edit source$/i }));
+    const editTitle = screen.getByRole('textbox', { name: /edit title/i });
+    await userEvent.clear(editTitle);
+    await userEvent.type(editTitle, 'Source EDITED');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(screen.getByText('Source EDITED')).toBeInTheDocument());
+    // The copy should still have its original title
+    expect(screen.getByText('Copy of Source')).toBeInTheDocument();
+  });
+});
+
+describe('App — sort', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('renders a sort dropdown with Newest first selected by default', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument(),
+    );
+    const select = screen.getByRole('combobox', { name: /sort notes/i });
+    expect(select).toBeInTheDocument();
+    expect((select as HTMLSelectElement).value).toBe('newest');
+  });
+
+  it('changing sort to oldest refreshes the list and resets to page 1', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Note A');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body a');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Note A')).toBeInTheDocument());
+
+    const select = screen.getByRole('combobox', { name: /sort notes/i });
+    await userEvent.selectOptions(select, 'oldest');
+    await waitFor(() => expect((select as HTMLSelectElement).value).toBe('oldest'));
+    // List should still contain the note (mock handles oldest sort)
+    await waitFor(() => expect(screen.getByText('Note A')).toBeInTheDocument());
+  });
+
+  it('changing sort to title refreshes the list', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Banana');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Banana')).toBeInTheDocument());
+
+    const select = screen.getByRole('combobox', { name: /sort notes/i });
+    await userEvent.selectOptions(select, 'title');
+    await waitFor(() => expect((select as HTMLSelectElement).value).toBe('title'));
+    await waitFor(() => expect(screen.getByText('Banana')).toBeInTheDocument());
+  });
+});
+
+describe('App — title-sort create with duplicate titles', () => {
+  it('navigates to the page showing the new note even when a note with the same title already exists', async () => {
+    // 5 notes: Apple–Elderberry fill page 1.
+    // We already have a note titled "Zebra" on page 2. Creating another "Zebra"
+    // should still land on the page that shows THE NEW note (also "Zebra").
+    // With id-based lookup both notes with title "Zebra" sort adjacently; the
+    // second one (higher id) will appear on whichever page its rank lands on —
+    // the test verifies the app navigates away from page 1 and shows the new note.
+    const initialNotes = [
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
+      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '6', title: 'Zebra', body: 'b', tags: [] as string[], pinned: false },
+    ];
+    const notes = [...initialNotes];
+    let nextId = 7;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          const b = JSON.parse(String(init.body)) as {
+            title: string;
+            body: string;
+            tags?: string[];
+          };
+          const n = {
+            id: String(nextId++),
+            title: b.title,
+            body: b.body,
+            tags: b.tags ?? [],
+            pinned: false,
+          };
+          notes.push(n);
+          return new Response(JSON.stringify(n), { status: 201 });
+        }
+        const urlObj = new URL(url as string, 'http://localhost');
+        const p = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'title')
+            return a.title.localeCompare(b.title) || Number(a.id) - Number(b.id);
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id);
+        });
+        const start = (p - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
+      }),
+    );
+
+    render(<App />);
+    // Switch to title sort
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'title');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+    // "Zebra" is already on page 2 — page 1 shows Apple–Elderberry
+    expect(screen.queryByText('Zebra')).not.toBeInTheDocument();
+
+    // Create a second note also called "Zebra"
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Zebra');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'duplicate title body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // The app must navigate to the page that contains the new "Zebra" note
+    // (page 2 under title sort). Apple (page 1) must no longer be visible.
+    await waitFor(() => expect(screen.queryByText('Apple')).not.toBeInTheDocument());
+    // At least one "Zebra" is visible (both sort adjacently on page 2)
+    await waitFor(() => expect(screen.getAllByText('Zebra').length).toBeGreaterThan(0));
+  });
+});
+
+describe('App — duplicate sort-aware navigation', () => {
+  function makeSortAwareSetup() {
+    // 5 notes: Apple–Elderberry, so page 1 is exactly full.
+    const initialNotes = [
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
+      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
+    ];
+    const notes = [...initialNotes];
+    let nextId = initialNotes.length + 1;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const urlStr = url as string;
+
+        // POST /api/notes/:id/duplicate
+        if (init?.method === 'POST' && /\/api\/notes\/[^/]+\/duplicate$/.test(urlStr)) {
+          const sourceId = urlStr.split('/').at(-2) ?? '';
+          const source = notes.find((n) => n.id === sourceId);
+          if (!source) return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+          const copy = {
+            id: String(nextId++),
+            title: `Copy of ${source.title}`,
+            body: source.body,
+            tags: [...source.tags],
+            pinned: false,
+          };
+          notes.push(copy);
+          return new Response(JSON.stringify(copy), { status: 201 });
+        }
+
+        const urlObj = new URL(urlStr, 'http://localhost');
+        const p = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'title') return a.title.localeCompare(b.title);
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id);
+        });
+        const start = (p - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
+      }),
+    );
+
+    return notes;
+  }
+
+  it('duplicate under newest sort navigates to page 1 where the copy (highest createdAt) appears', async () => {
+    makeSortAwareSetup();
+    render(<App />);
+    // Default sort is newest; page 1 shows note id=5 (Elderberry) first
+    await waitFor(() => expect(screen.getByText('Elderberry')).toBeInTheDocument());
+
+    // Duplicate the first note in the list (Elderberry has the highest id / newest)
+    await userEvent.click(screen.getByRole('button', { name: /duplicate elderberry/i }));
+
+    // Under newest sort the copy (id=6, highest createdAt) must sort first → page 1
+    await waitFor(() => expect(screen.getByText('Copy of Elderberry')).toBeInTheDocument());
+    // Previous button disabled confirms we are on page 1
+    expect(screen.getByRole('button', { name: /previous/i })).toBeDisabled();
+  });
+
+  it('duplicate under oldest sort navigates to the last page where the copy (highest createdAt) appears', async () => {
+    makeSortAwareSetup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Elderberry')).toBeInTheDocument());
+
+    // Switch to oldest sort: page 1 now shows Apple (id=1) first
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'oldest');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+    expect(screen.queryByText('Elderberry')).toBeInTheDocument();
+
+    // Duplicate Apple — under oldest sort, the copy (highest id) sorts last → last page
+    await userEvent.click(screen.getByRole('button', { name: /duplicate apple/i }));
+
+    // The copy sorts last under oldest → navigates to the last page
+    await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument());
+    // The original Apple (page 1 content) is no longer visible
+    expect(screen.queryByText('Apple')).not.toBeInTheDocument();
+    // Next button disabled confirms we are on the last page
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
+
+  it('duplicate under title sort navigates to the page containing the copy alphabetically', async () => {
+    makeSortAwareSetup();
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('Elderberry')).toBeInTheDocument());
+
+    // Switch to title sort
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'title');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+    // Page 1 under title: Apple, Banana, Cherry, Date, Elderberry
+    expect(screen.queryByText('Copy of')).not.toBeInTheDocument();
+
+    // Duplicate "Banana" → copy title "Copy of Banana"
+    // "C" sorts after "B" but before "D" — "Copy of Banana" lands alphabetically
+    // between Cherry and Date, so all 6 notes still fit on pages 1-2 (5+1).
+    // Page 1: Apple, Banana, Cherry, Copy of Banana, Date → Copy of Banana on page 1
+    // Actually: "Copy of Banana".localeCompare order: Apple < Banana < Cherry < Copy of Banana < Date < Elderberry
+    // Page 1 (5 notes): Apple, Banana, Cherry, Copy of Banana, Date
+    // The app should navigate to the page containing "Copy of Banana".
+    await userEvent.click(screen.getByRole('button', { name: /duplicate banana/i }));
+
+    await waitFor(() => expect(screen.getByText('Copy of Banana')).toBeInTheDocument());
+  });
+
+  it('duplicate while a search is active clears the search and navigates to the correct page', async () => {
+    // Use the search-aware mock (mockFetchSequence) so the `q` param is respected.
+    // 5 notes fill page 1; PAGE_SIZE=5. With "oldest" sort the copy (highest id)
+    // lands on the last page (page 2). If the bug is present, a filtered total of 1
+    // would incorrectly compute dest=1, leaving the user on page 1 where the copy
+    // is not visible.
+    mockFetchSequence();
+    render(<App />);
+
+    // Create 5 notes so that page 1 is exactly full with oldest sort.
+    const titles = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'];
+    for (const t of titles) {
+      await userEvent.type(screen.getByLabelText(/^title$/i), t);
+      await userEvent.type(screen.getByLabelText(/^body$/i), `${t} body`);
+      await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+      await waitFor(() => expect(screen.getByText(t)).toBeInTheDocument());
+    }
+
+    // Switch to oldest sort so the copy always goes to the last page (page 2).
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'oldest');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+
+    // Activate a search filter that matches only "Apple".
+    // The filtered total becomes 1, not 5.
+    const searchBox = screen.getByRole('textbox', { name: /search notes/i });
+    await userEvent.type(searchBox, 'Apple');
+    await waitFor(() => expect(screen.queryByText('Banana')).not.toBeInTheDocument());
+    expect(screen.getByText('Apple')).toBeInTheDocument();
+
+    // Duplicate Apple while the search is active.
+    // The copy ("Copy of Apple") has the highest id and under oldest sort appears last.
+    // With 6 total unfiltered notes across 2 pages (5+1), the copy is on page 2.
+    await userEvent.click(screen.getByRole('button', { name: /duplicate apple/i }));
+
+    // Search should be cleared and the copy should be visible on the correct page.
+    await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument());
+    await waitFor(() => expect(searchBox).toHaveValue(''));
+    // On the last page the "Next" button must be disabled.
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
+});
+
+describe('App — create with pinned notes', () => {
+  it('create under newest sort with pinned notes filling page 1 navigates to the correct page', async () => {
+    // 5 pinned notes fill page 1. Creating a new (unpinned) note under newest sort:
+    // pinned notes always sort first, so the new note goes to page 2, NOT page 1.
+    // The newest-first shortcut (always page 1) would be wrong here.
+    const pinned = Array.from({ length: 5 }, (_, i) => ({
+      id: String(i + 1),
+      title: `Pinned ${i + 1}`,
+      body: `body ${i + 1}`,
+      tags: [] as string[],
+      pinned: true,
+    }));
+    const notes = [...pinned];
+    let nextId = pinned.length + 1;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          const b = JSON.parse(String(init.body)) as {
+            title: string;
+            body: string;
+            tags?: string[];
+          };
+          const n = {
+            id: String(nextId++),
+            title: b.title,
+            body: b.body,
+            tags: b.tags ?? [],
+            pinned: false,
+          };
+          notes.push(n);
+          return new Response(JSON.stringify(n), { status: 201 });
+        }
+        const urlObj = new URL(url as string, 'http://localhost');
+        const p = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        // Pinned notes always sort first, then by sort order within each group
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id); // newest
+        });
+        const start = (p - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
+      }),
+    );
+
+    render(<App />);
+    // Page 1 shows the 5 pinned notes
+    await waitFor(() => expect(screen.getByText('Pinned 1')).toBeInTheDocument());
+
+    // Create a new (unpinned) note — should land on page 2 since all 5 pinned
+    // notes occupy page 1 and the unpinned note sorts after them
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'New unpinned');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // Must navigate to page 2 where the new unpinned note appears
+    await waitFor(() => expect(screen.getByText('New unpinned')).toBeInTheDocument());
+    // Page 1 (pinned notes) should not be visible
+    expect(screen.queryByText('Pinned 1')).not.toBeInTheDocument();
+    // Next button disabled confirms we are on the last page (page 2)
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
+
+  it('create under oldest sort with pinned notes filling page 1 navigates to the correct page', async () => {
+    // 5 pinned notes fill page 1. Creating a new (unpinned) note under oldest sort:
+    // pinned notes sort first, so the new note goes to page 2, NOT the "last page" shortcut
+    // (which would also be page 2 here, but for the wrong reason — testing the fetch-and-find path).
+    // Use 10 pinned notes + create 1 unpinned so there are 3 pages (5+5+1),
+    // and the new note must land on page 3.
+    const pinned = Array.from({ length: 10 }, (_, i) => ({
+      id: String(i + 1),
+      title: `PinnedOld ${i + 1}`,
+      body: `body ${i + 1}`,
+      tags: [] as string[],
+      pinned: true,
+    }));
+    const notes = [...pinned];
+    let nextId = pinned.length + 1;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          const b = JSON.parse(String(init.body)) as {
+            title: string;
+            body: string;
+            tags?: string[];
+          };
+          const n = {
+            id: String(nextId++),
+            title: b.title,
+            body: b.body,
+            tags: b.tags ?? [],
+            pinned: false,
+          };
+          notes.push(n);
+          return new Response(JSON.stringify(n), { status: 201 });
+        }
+        const urlObj = new URL(url as string, 'http://localhost');
+        const p = Number(urlObj.searchParams.get('page') ?? '1');
+        const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
+        const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+        const sorted = [...notes].sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          if (sortParam === 'oldest') return Number(a.id) - Number(b.id);
+          return Number(b.id) - Number(a.id);
+        });
+        const start = (p - 1) * pageSize;
+        return new Response(JSON.stringify(sorted.slice(start, start + pageSize)), {
+          status: 200,
+          headers: { 'X-Total-Count': String(sorted.length) },
+        });
+      }),
+    );
+
+    render(<App />);
+    // Switch to oldest sort
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'oldest');
+    // Page 1 shows pinned notes 1-5 (oldest pinned first within pinned group)
+    await waitFor(() => expect(screen.getByText('PinnedOld 1')).toBeInTheDocument());
+
+    // Create a new (unpinned) note — with 10 pinned notes + 1 unpinned = 11 total
+    // Pinned fill pages 1 (5 pinned) and 2 (5 pinned); unpinned lands on page 3
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'New unpinned oldest');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // Must navigate to page 3 — not page 2 (what an "oldest→last page" shortcut would compute)
+    // "last page" shortcut: ceil(11/5)=3 — actually the same here, but the route through
+    // the fetch-and-find is what we're testing. Either way the unpinned note is on page 3.
+    await waitFor(() => expect(screen.getByText('New unpinned oldest')).toBeInTheDocument());
+    // Next button disabled confirms we are on the last page
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
+});
+
+describe('App — create and duplicate with both query and tag filter active', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('creating a note while both a search query and a tag filter are active clears both and navigates correctly', async () => {
+    render(<App />);
+
+    // Create 5 tagged notes to fill page 1
+    const titles = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'];
+    for (const t of titles) {
+      await userEvent.type(screen.getByLabelText(/^title$/i), t);
+      await userEvent.type(screen.getByLabelText(/^body$/i), `${t} body`);
+      await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'fruit');
+      await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+      await waitFor(() => expect(screen.getByText(t)).toBeInTheDocument());
+    }
+
+    // Switch to oldest sort so a new note will go to the last page
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'oldest');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+
+    // Activate both a tag filter AND a search query
+    await userEvent.type(screen.getByRole('textbox', { name: /filter by tag/i }), 'fruit');
+    await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'Apple');
+    // Wait for both filters to reduce the list to just "Apple"
+    await waitFor(() => expect(screen.queryByText('Banana')).not.toBeInTheDocument());
+    expect(screen.getByText('Apple')).toBeInTheDocument();
+
+    // Create a note that does NOT match either filter
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Zucchini');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'veggie body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // Both filters must be cleared and the new note must be visible
+    await waitFor(() => expect(screen.getByText('Zucchini')).toBeInTheDocument());
+    // Search input cleared
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /search notes/i })).toHaveValue(''),
+    );
+    // Tag filter cleared
+    expect(screen.getByRole('textbox', { name: /filter by tag/i })).toHaveValue('');
+    // Next button disabled confirms we are on the last page (6 notes → page 2)
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
+
+  it('duplicating a note while both a search query and a tag filter are active clears both and navigates correctly', async () => {
+    render(<App />);
+
+    // Create 5 tagged notes to fill page 1
+    const titles = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'];
+    for (const t of titles) {
+      await userEvent.type(screen.getByLabelText(/^title$/i), t);
+      await userEvent.type(screen.getByLabelText(/^body$/i), `${t} body`);
+      await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'fruit');
+      await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+      await waitFor(() => expect(screen.getByText(t)).toBeInTheDocument());
+    }
+
+    // Switch to oldest sort so the duplicate (highest id) goes to the last page
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'oldest');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+
+    // Activate both a tag filter AND a search query
+    await userEvent.type(screen.getByRole('textbox', { name: /filter by tag/i }), 'fruit');
+    await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'Apple');
+    await waitFor(() => expect(screen.queryByText('Banana')).not.toBeInTheDocument());
+    expect(screen.getByText('Apple')).toBeInTheDocument();
+
+    // Duplicate Apple while both filters are active
+    await userEvent.click(screen.getByRole('button', { name: /duplicate apple/i }));
+
+    // Both filters must be cleared and the copy must be visible on the correct page
+    await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument());
+    // Search input cleared
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /search notes/i })).toHaveValue(''),
+    );
+    // Tag filter cleared
+    expect(screen.getByRole('textbox', { name: /filter by tag/i })).toHaveValue('');
+    // On the last page (6 total, page 2 shows the copy)
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
   });
 });

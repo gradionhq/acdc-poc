@@ -1,0 +1,22 @@
+/*
+ * Reset styles for markdown-rendered content.
+ *
+ * The global theme.css applies `list-style: none` and `padding: 0` to all
+ * <ul> elements, which causes Chromium to remove the implicit ARIA list/listitem
+ * roles, breaking both accessibility and Playwright role-based queries.
+ * Override them here so rendered Markdown lists are semantically correct.
+ */
+
+.markdown ul,
+.markdown ol {
+  list-style: revert;
+  padding: revert;
+}
+
+.markdown li {
+  border: none;
+  background-color: transparent;
+  padding: revert;
+  margin-bottom: revert;
+  border-radius: 0;
+}

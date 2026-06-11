@@ -29,6 +29,9 @@ export interface ListResult {
   total: number;
 }
 
+/** Valid values for the sort query parameter. */
+export type SortOrder = 'newest' | 'oldest' | 'title';
+
 export class NoteStore {
   private readonly notes = new Map<string, Note>();
   /**
@@ -69,6 +72,22 @@ export class NoteStore {
     };
     this.notes.set(id, updated);
     return updated;
+  }
+
+  /**
+   * Duplicate an existing note: copies title (prefixed "Copy of …"), body, and
+   * tags into a brand-new note.  The duplicate gets its own id and createdAt
+   * timestamp, is not pinned, and does not inherit any attachments.
+   * Returns undefined when the source note does not exist.
+   */
+  duplicate(id: string): Note | undefined {
+    const source = this.notes.get(id);
+    if (!source) return undefined;
+    return this.create({
+      title: `Copy of ${source.title}`,
+      body: source.body,
+      tags: [...source.tags],
+    });
   }
 
   togglePin(id: string): Note | undefined {
@@ -162,6 +181,17 @@ export class NoteStore {
     return this.attachments.get(`${noteId}/${safeName}`);
   }
 
+  /**
+   * Delete a single attachment from a note.
+   * Returns `true` if deleted, `false` if the note exists but the attachment
+   * does not, and `undefined` if the note itself does not exist.
+   */
+  deleteAttachment(noteId: string, filename: string): boolean | undefined {
+    if (!this.notes.has(noteId)) return undefined;
+    const safeName = this.sanitiseFilename(filename);
+    return this.attachments.delete(`${noteId}/${safeName}`);
+  }
+
   listAttachments(noteId: string): AttachmentMeta[] | undefined {
     if (!this.notes.has(noteId)) return undefined;
     const prefix = `${noteId}/`;
@@ -174,15 +204,31 @@ export class NoteStore {
     return result;
   }
 
-  list(page: number, pageSize: number, query?: string, tag?: string): ListResult {
+  /** Test-only: clear all notes and attachments and reset the id sequence. */
+  reset(): void {
+    this.notes.clear();
+    this.attachments.clear();
+    this.seq = 0;
+  }
+
+  list(
+    page: number,
+    pageSize: number,
+    query?: string,
+    tag?: string,
+    sort: SortOrder = 'newest',
+  ): ListResult {
     const term = query ? query.trim().toLowerCase() : '';
     const tagFilter = tag ? tag.trim().toLowerCase() : '';
     const all = [...this.notes.values()]
       .sort((a, b) => {
-        // Pinned notes sort before unpinned; within each group preserve
-        // insertion order (createdAt ascending).
+        // Pinned notes always sort before unpinned regardless of secondary sort.
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-        return a.createdAt - b.createdAt;
+        // Within each pin group apply the requested secondary sort.
+        if (sort === 'oldest') return a.createdAt - b.createdAt;
+        if (sort === 'title') return a.title.localeCompare(b.title);
+        // 'newest' (default): most recently created first
+        return b.createdAt - a.createdAt;
       })
       .filter(
         (n) =>

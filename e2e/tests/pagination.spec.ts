@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 
 // Creates `count` notes with unique titles and returns them.
 async function seedNotes(page: import('@playwright/test').Page, count: number): Promise<string[]> {
@@ -21,6 +21,11 @@ async function seedNotes(page: import('@playwright/test').Page, count: number): 
 test('pagination: next/prev controls work across multiple pages', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+
+  // Switch to oldest sort so newly created notes land on the last page.
+  // This ensures the app navigates to the last page after the 6th create,
+  // which is the state this test is designed to assert.
+  await page.getByRole('combobox', { name: /sort notes/i }).selectOption('oldest');
 
   // Seed 6 notes so we have 2 pages (pageSize = 5)
   const titles = await seedNotes(page, 6);
