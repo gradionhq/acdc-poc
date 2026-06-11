@@ -13,6 +13,7 @@ import {
   uploadAttachment,
   type AttachmentMeta,
   type Note,
+  type SortOrder,
 } from './api';
 import { Button } from './components/Button';
 import { NoteBody } from './NoteBody';
@@ -55,12 +56,17 @@ export function App() {
   const [query, setQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [sort, setSort] = useState<SortOrder>('newest');
   /** noteId → list of attachment metadata (loaded lazily on expand). */
   const [attachments, setAttachments] = useState<Record<string, AttachmentMeta[]>>({});
   /** noteId → true while attachments panel is open. */
   const [attachmentsOpen, setAttachmentsOpen] = useState<Record<string, boolean>>({});
   /** noteId → upload error string. */
   const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
+
+  // True only on the very first load — gates the skeleton so background
+  // refreshes after mutations do not flash the whole list.
+  const [initialLoading, setInitialLoading] = useState(true);
 
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
@@ -70,25 +76,32 @@ export function App() {
   // directly in that case).
   const skipDebouncePageResetRef = useRef(false);
 
+  // Ref for the title input so the empty-state CTA can focus it idiomatically.
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  async function refresh(p = page, q = query, tf = tagFilter, archived = showArchived) {
+  async function refresh(p = page, q = query, tf = tagFilter, s = sort, archived = showArchived) {
     const seq = ++reqSeqRef.current;
     try {
-      const result = await listNotes(p, PAGE_SIZE, q, tf, archived);
+      const result = await listNotes(p, PAGE_SIZE, q, tf, s, archived);
       if (seq !== reqSeqRef.current) return; // stale — a newer request is in flight
       setNotes(result.notes);
       setTotal(result.total);
-    } catch (e) {
+      setError(null);
+    } catch (e: unknown) {
       if (seq !== reqSeqRef.current) return;
-      setError(String(e));
+      const msg = e instanceof Error ? e.message : 'An unexpected error occurred';
+      setError(msg);
+    } finally {
+      if (seq === reqSeqRef.current) setInitialLoading(false);
     }
   }
 
   useEffect(() => {
-    void refresh(page, query, tagFilter, showArchived);
+    void refresh(page, query, tagFilter, sort, showArchived);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, query, tagFilter, showArchived]);
+  }, [page, query, tagFilter, sort, showArchived]);
 
   // Debounce search input: update `query` after SEARCH_DEBOUNCE_MS of inactivity.
   // Reset to page 1 whenever the query changes so results are always from the start.
@@ -117,8 +130,8 @@ export function App() {
       // If a search filter is active, clear it before navigating so the new
       // note is always visible. With a filter active, `total` reflects only
       // the filtered count; the new note may not match the query, so
-      // navigating to `lastPage` of the filtered results would not show it.
-      // Fetch the real (unfiltered) total to compute the correct last page.
+      // navigating to the target page of the unfiltered results would not show it.
+      // Fetch the real (unfiltered) total to compute the correct destination page.
       const unfilteredTotal = query !== '' ? (await listNotes(1, 1, '')).total : total;
       if (query !== '') {
         // Signal the debounce effect to skip its setPage(1) reset; onSubmit
@@ -127,18 +140,38 @@ export function App() {
         setSearchInput('');
         setQuery('');
       }
-      // New note is appended at the end (oldest-first ordering).
-      // Navigate to the last page so it is immediately visible.
       const newTotal = unfilteredTotal + 1;
-      const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
-      if (page === lastPage && query === '') {
-        await refresh(lastPage, '');
+      // Navigate to the page where the newly created note will appear.
+      if (sort === 'oldest') {
+        // oldest: the new note always sorts last → last page.
+        const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+        if (page === lastPage && query === '') {
+          await refresh(lastPage, '', tagFilter, sort);
+        } else {
+          setPage(lastPage);
+        }
+      } else if (sort === 'newest') {
+        // newest: the new note always sorts first → page 1.
+        if (page === 1 && query === '') {
+          await refresh(1, '', tagFilter, sort);
+        } else {
+          setPage(1);
+        }
       } else {
-        setPage(lastPage);
+        // title: the new note's page depends on its alphabetical rank among
+        // all (unfiltered) notes. Fetch the full sorted list to find its position.
+        const fullPage = await listNotes(1, newTotal, '', tagFilter, 'title');
+        const rank = fullPage.notes.findIndex((n) => n.title === title) + 1;
+        const dest = rank > 0 ? Math.ceil(rank / PAGE_SIZE) : 1;
+        if (page === dest && query === '') {
+          await refresh(dest, '', tagFilter, sort);
+        } else {
+          setPage(dest);
+        }
       }
-    } catch (e) {
+    } catch (e: unknown) {
       addToast('Failed to create note', 'error');
-      setError(String(e));
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -167,9 +200,9 @@ export function App() {
       setError(null);
       addToast('Note updated', 'success');
       await refresh(page);
-    } catch (e) {
+    } catch (e: unknown) {
       addToast('Failed to update note', 'error');
-      setError(String(e));
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -183,8 +216,8 @@ export function App() {
     try {
       const metas = await listAttachments(id);
       setAttachments((prev) => ({ ...prev, [id]: metas }));
-    } catch (e) {
-      setError(String(e));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -198,8 +231,11 @@ export function App() {
       await uploadAttachment(id, file);
       const metas = await listAttachments(id);
       setAttachments((prev) => ({ ...prev, [id]: metas }));
-    } catch (err) {
-      setUploadError((prev) => ({ ...prev, [id]: String(err) }));
+    } catch (err: unknown) {
+      setUploadError((prev) => ({
+        ...prev,
+        [id]: err instanceof Error ? err.message : 'An unexpected error occurred',
+      }));
     }
   }
 
@@ -221,9 +257,9 @@ export function App() {
           setPage(1);
         }
       }
-    } catch (e) {
+    } catch (e: unknown) {
       addToast('Failed to toggle pin', 'error');
-      setError(String(e));
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -232,8 +268,15 @@ export function App() {
       await toggleArchive(id);
       setError(null);
       addToast(currentlyArchived ? 'Note unarchived' : 'Note archived', 'success');
-      // Note moves between the two views — just refresh the current view
-      await refresh(page);
+      // Note leaves the current view; the current page may become empty.
+      const newTotal = total - 1;
+      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      const newPage = Math.min(page, newTotalPages);
+      if (newPage === page) {
+        await refresh(page);
+      } else {
+        setPage(newPage);
+      }
     } catch (e) {
       addToast('Failed to toggle archive', 'error');
       setError(String(e));
@@ -265,9 +308,9 @@ export function App() {
       } else {
         setPage(newPage);
       }
-    } catch (e) {
+    } catch (e: unknown) {
       addToast('Failed to delete note', 'error');
-      setError(String(e));
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
 
@@ -284,10 +327,15 @@ export function App() {
       } else {
         setPage(lastPage);
       }
-    } catch (e) {
-      setError(String(e));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
+
+  // True when there are no notes to show AND no filter is active — i.e. the
+  // store is genuinely empty (not just "no results for this search").
+  const isFilterActive = query !== '' || tagFilter !== '';
+  const showEmptyState = !initialLoading && !error && notes.length === 0;
 
   return (
     <main className={styles.page}>
@@ -302,9 +350,12 @@ export function App() {
         </button>
       </header>
       {error && (
-        <p role="alert" className={styles.alert}>
-          {error}
-        </p>
+        <div role="alert" className={styles.errorBanner}>
+          <span className={styles.errorMessage}>{error}</span>
+          <Button variant="danger" onClick={() => void refresh()} aria-label="Retry">
+            Retry
+          </Button>
+        </div>
       )}
 
       {/* Search / filter bar */}
@@ -332,6 +383,22 @@ export function App() {
             }}
           />
         </label>
+        <label className={styles.fieldLabel}>
+          Sort by
+          <select
+            className={styles.input}
+            aria-label="Sort notes"
+            value={sort}
+            onChange={(e) => {
+              setPage(1);
+              setSort(e.target.value as SortOrder);
+            }}
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="title">Title (A–Z)</option>
+          </select>
+        </label>
         <Button
           variant="secondary"
           aria-label={showArchived ? 'Show active notes' : 'Show archived notes'}
@@ -351,6 +418,7 @@ export function App() {
           <label className={styles.fieldLabel}>
             Title
             <input
+              ref={titleInputRef}
               className={styles.input}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -386,174 +454,208 @@ export function App() {
         </div>
       </form>
 
-      {/* Note list */}
-      <ul className={styles.noteList}>
-        {notes.map((n) =>
-          editingId === n.id ? (
-            <li key={n.id} className={styles.noteCard}>
-              <div className={styles.fieldGroup}>
-                <label className={styles.fieldLabel}>
-                  Edit title
-                  <input
-                    className={styles.input}
-                    aria-label="Edit title"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                  />
-                </label>
-                <label className={styles.fieldLabel}>
-                  Edit body
-                  <textarea
-                    className={styles.textarea}
-                    aria-label="Edit body"
-                    value={editBody}
-                    onChange={(e) => setEditBody(e.target.value)}
-                  />
-                </label>
-                <label className={styles.fieldLabel}>
-                  Edit tags
-                  <input
-                    className={styles.input}
-                    aria-label="Edit tags"
-                    placeholder="comma-separated tags"
-                    value={editTagsInput}
-                    onChange={(e) => setEditTagsInput(e.target.value)}
-                  />
-                </label>
-                <div className={styles.noteActions}>
-                  <Button variant="primary" onClick={() => void onEditSave(n.id)}>
-                    Save
-                  </Button>
-                  <Button variant="secondary" onClick={onEditCancel}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
+      {/* Loading skeleton — only on initial load, not background refresh */}
+      {initialLoading && (
+        <ul aria-label="Loading notes" aria-busy="true" className={styles.noteList}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <li key={i} className={`${styles.noteCard} ${styles.skeletonCard}`} aria-hidden="true">
+              <span className={`${styles.skeletonLine} ${styles.skeletonTitle}`} />
+              <span className={`${styles.skeletonLine} ${styles.skeletonBody}`} />
             </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Empty state */}
+      {showEmptyState && (
+        <div className={styles.emptyState} role="status">
+          {isFilterActive ? (
+            <p>No notes match your search.</p>
           ) : (
-            <li key={n.id} className={styles.noteCard}>
-              <div className={styles.noteHeader}>
-                <span className={styles.noteTitle}>{n.title}</span>
-                {n.pinned && (
-                  <span aria-label="Pinned" className={styles.pinnedBadge}>
-                    📌
-                  </span>
-                )}
-              </div>
-              <NoteBody body={n.body} className={styles.noteBody} />
-              {n.tags.length > 0 && (
-                <div className={styles.tagList} aria-label="Tags">
-                  {n.tags.map((tag) => (
-                    <span key={tag} data-tag={tag} className={styles.tag}>
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className={styles.noteActions}>
-                {!n.archived && (
-                  <Button
-                    variant="secondary"
-                    aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
-                    onClick={() => void onTogglePin(n.id, n.pinned)}
-                  >
-                    {n.pinned ? 'Unpin' : 'Pin'}
-                  </Button>
-                )}
-                <Button
-                  variant="secondary"
-                  aria-label={n.archived ? `Unarchive ${n.title}` : `Archive ${n.title}`}
-                  onClick={() => void onToggleArchive(n.id, n.archived)}
-                >
-                  {n.archived ? 'Unarchive' : 'Archive'}
-                </Button>
-                {!n.archived && (
-                  <Button
-                    variant="secondary"
-                    aria-label={`Edit ${n.title}`}
-                    onClick={() => onEditStart(n)}
-                  >
-                    Edit
-                  </Button>
-                )}
-                <Button
-                  variant="danger"
-                  aria-label={`Delete ${n.title}`}
-                  onClick={() => void onDelete(n.id)}
-                >
-                  Delete
-                </Button>
-                {!n.archived && (
-                  <Button
-                    variant="secondary"
-                    aria-label={`Duplicate ${n.title}`}
-                    onClick={() => void onDuplicate(n.id)}
-                  >
-                    Duplicate
-                  </Button>
-                )}
-                {!n.archived && (
-                  <Button
-                    variant="secondary"
-                    aria-label={`Attachments for ${n.title}`}
-                    onClick={() => void onToggleAttachments(n.id)}
-                  >
-                    {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
-                  </Button>
-                )}
-              </div>
-              {attachmentsOpen[n.id] && (
-                <div
-                  className={styles.attachmentsPanel}
-                  aria-label={`Attachments panel for ${n.title}`}
-                >
-                  {uploadError[n.id] && (
-                    <p role="alert" className={styles.alert}>
-                      {uploadError[n.id]}
-                    </p>
-                  )}
-                  <label className={styles.attachmentUpload}>
-                    Attach file
+            <>
+              <p>No notes yet. Create your first note above!</p>
+              <Button
+                variant="primary"
+                onClick={() => titleInputRef.current?.focus()}
+                aria-label="Add your first note"
+              >
+                Add your first note
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Note list — always rendered after initial load to avoid flash on mutations */}
+      {!initialLoading && (
+        <ul className={styles.noteList} aria-label="Notes list">
+          {notes.map((n) =>
+            editingId === n.id ? (
+              <li key={n.id} className={styles.noteCard}>
+                <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel}>
+                    Edit title
                     <input
-                      type="file"
-                      aria-label={`Upload attachment for ${n.title}`}
-                      onChange={(e) => void onUploadFile(n.id, e)}
+                      className={styles.input}
+                      aria-label="Edit title"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
                     />
                   </label>
-                  {(attachments[n.id] ?? []).length === 0 ? (
-                    <p className={styles.attachmentEmpty}>No attachments yet.</p>
-                  ) : (
-                    <ul
-                      className={styles.attachmentList}
-                      aria-label={`Attachment list for ${n.title}`}
-                    >
-                      {(attachments[n.id] ?? []).map((att) => (
-                        <li key={att.filename}>
-                          <a
-                            href={attachmentDownloadUrl(n.id, att.filename)}
-                            download={att.filename}
-                            aria-label={`Download ${att.filename}`}
-                          >
-                            {att.filename}
-                          </a>{' '}
-                          ({att.size} bytes)
-                          <Button
-                            variant="danger"
-                            aria-label={`Delete attachment ${att.filename}`}
-                            onClick={() => void onDeleteAttachment(n.id, att.filename)}
-                          >
-                            Delete
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
+                  <label className={styles.fieldLabel}>
+                    Edit body
+                    <textarea
+                      className={styles.textarea}
+                      aria-label="Edit body"
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                    />
+                  </label>
+                  <label className={styles.fieldLabel}>
+                    Edit tags
+                    <input
+                      className={styles.input}
+                      aria-label="Edit tags"
+                      placeholder="comma-separated tags"
+                      value={editTagsInput}
+                      onChange={(e) => setEditTagsInput(e.target.value)}
+                    />
+                  </label>
+                  <div className={styles.noteActions}>
+                    <Button variant="primary" onClick={() => void onEditSave(n.id)}>
+                      Save
+                    </Button>
+                    <Button variant="secondary" onClick={onEditCancel}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </li>
+            ) : (
+              <li key={n.id} className={styles.noteCard}>
+                <div className={styles.noteHeader}>
+                  <span className={styles.noteTitle}>{n.title}</span>
+                  {n.pinned && (
+                    <span aria-label="Pinned" className={styles.pinnedBadge}>
+                      📌
+                    </span>
                   )}
                 </div>
-              )}
-            </li>
-          ),
-        )}
-      </ul>
+                <NoteBody body={n.body} className={styles.noteBody} />
+                {n.tags.length > 0 && (
+                  <div className={styles.tagList} aria-label="Tags">
+                    {n.tags.map((tag) => (
+                      <span key={tag} data-tag={tag} className={styles.tag}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className={styles.noteActions}>
+                  {!n.archived && (
+                    <Button
+                      variant="secondary"
+                      aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
+                      onClick={() => void onTogglePin(n.id, n.pinned)}
+                    >
+                      {n.pinned ? 'Unpin' : 'Pin'}
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    aria-label={n.archived ? `Unarchive ${n.title}` : `Archive ${n.title}`}
+                    onClick={() => void onToggleArchive(n.id, n.archived)}
+                  >
+                    {n.archived ? 'Unarchive' : 'Archive'}
+                  </Button>
+                  {!n.archived && (
+                    <Button
+                      variant="secondary"
+                      aria-label={`Edit ${n.title}`}
+                      onClick={() => onEditStart(n)}
+                    >
+                      Edit
+                    </Button>
+                  )}
+                  <Button
+                    variant="danger"
+                    aria-label={`Delete ${n.title}`}
+                    onClick={() => void onDelete(n.id)}
+                  >
+                    Delete
+                  </Button>
+                  {!n.archived && (
+                    <Button
+                      variant="secondary"
+                      aria-label={`Duplicate ${n.title}`}
+                      onClick={() => void onDuplicate(n.id)}
+                    >
+                      Duplicate
+                    </Button>
+                  )}
+                  {!n.archived && (
+                    <Button
+                      variant="secondary"
+                      aria-label={`Attachments for ${n.title}`}
+                      onClick={() => void onToggleAttachments(n.id)}
+                    >
+                      {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
+                    </Button>
+                  )}
+                </div>
+                {attachmentsOpen[n.id] && (
+                  <div
+                    className={styles.attachmentsPanel}
+                    aria-label={`Attachments panel for ${n.title}`}
+                  >
+                    {uploadError[n.id] && (
+                      <p role="alert" className={styles.alert}>
+                        {uploadError[n.id]}
+                      </p>
+                    )}
+                    <label className={styles.attachmentUpload}>
+                      Attach file
+                      <input
+                        type="file"
+                        aria-label={`Upload attachment for ${n.title}`}
+                        onChange={(e) => void onUploadFile(n.id, e)}
+                      />
+                    </label>
+                    {(attachments[n.id] ?? []).length === 0 ? (
+                      <p className={styles.attachmentEmpty}>No attachments yet.</p>
+                    ) : (
+                      <ul
+                        className={styles.attachmentList}
+                        aria-label={`Attachment list for ${n.title}`}
+                      >
+                        {(attachments[n.id] ?? []).map((att) => (
+                          <li key={att.filename}>
+                            <a
+                              href={attachmentDownloadUrl(n.id, att.filename)}
+                              download={att.filename}
+                              aria-label={`Download ${att.filename}`}
+                            >
+                              {att.filename}
+                            </a>{' '}
+                            ({att.size} bytes)
+                            <Button
+                              variant="danger"
+                              aria-label={`Delete attachment ${att.filename}`}
+                              onClick={() => void onDeleteAttachment(n.id, att.filename)}
+                            >
+                              Delete
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </li>
+            ),
+          )}
+        </ul>
+      )}
 
       {/* Pagination */}
       <nav aria-label="Pagination" className={styles.pagination}>
