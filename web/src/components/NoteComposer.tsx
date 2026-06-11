@@ -1,5 +1,5 @@
 import type { RefObject, FormEvent } from 'react';
-import { PenLine, Tag, Paperclip } from 'lucide-react';
+import { PenLine, Tag } from 'lucide-react';
 import { Button } from './Button';
 import { NOTE_COLORS, type NoteColor } from '../api';
 import { countWords, countChars } from '../wordCount';
@@ -70,24 +70,21 @@ export function NoteComposer({
           </p>
         </div>
 
-        <div className={`${styles.field} ${styles.tagsRow}`}>
+        <div className={styles.field}>
           <label className={styles.fieldLabel} htmlFor="composer-tags">
             Tags
           </label>
-          <Tag
-            size={14}
-            className={styles.tagsIcon}
-            aria-hidden="true"
-            style={{ top: 'calc(1.5rem + var(--space-2) + 0.65rem)' }}
-          />
-          <input
-            id="composer-tags"
-            className={`${styles.input} ${styles.tagsInput}`}
-            aria-label="Tags"
-            placeholder="comma-separated tags"
-            value={tagsInput}
-            onChange={(e) => onTagsInputChange(e.target.value)}
-          />
+          <div className={styles.tagsWrapper}>
+            <Tag size={14} className={styles.tagsIcon} aria-hidden="true" />
+            <input
+              id="composer-tags"
+              className={`${styles.input} ${styles.tagsInput}`}
+              aria-label="Tags"
+              placeholder="comma-separated tags"
+              value={tagsInput}
+              onChange={(e) => onTagsInputChange(e.target.value)}
+            />
+          </div>
         </div>
 
         <fieldset className={styles.colorFieldset}>
@@ -115,15 +112,6 @@ export function NoteComposer({
             })}
           </div>
         </fieldset>
-
-        <div className={styles.field}>
-          <span className={styles.fieldLabel}>Attachments</span>
-          <div className={styles.dropzone} aria-label="Attachment dropzone">
-            <Paperclip size={18} className={styles.dropzoneIcon} aria-hidden="true" />
-            <span>Drop files here or click to attach</span>
-            <span className={styles.dropzoneText}>Any file type supported</span>
-          </div>
-        </div>
 
         <div className={styles.formActions}>
           <Button type="submit" variant="primary">

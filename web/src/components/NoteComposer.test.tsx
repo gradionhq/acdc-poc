@@ -112,11 +112,6 @@ describe('NoteComposer', () => {
     expect(screen.getByText('1 word, 1 character')).toBeInTheDocument();
   });
 
-  it('renders the attachment dropzone', () => {
-    renderComposer();
-    expect(screen.getByLabelText(/attachment dropzone/i)).toBeInTheDocument();
-  });
-
   it('calls onSubmit when the form is submitted', async () => {
     const onSubmit = vi.fn((e) => e.preventDefault());
     renderComposer({ onSubmit });
