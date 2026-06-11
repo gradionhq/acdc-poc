@@ -4,6 +4,7 @@ export interface Note {
   body: string;
   tags: string[];
   createdAt: number;
+  pinned: boolean;
 }
 
 export interface Attachment {
@@ -47,6 +48,7 @@ export class NoteStore {
       // monotonic insertion counter — used purely for stable list ordering,
       // not a wall-clock timestamp (keeps pagination deterministic in tests)
       createdAt: this.seq,
+      pinned: false,
     };
     this.notes.set(note.id, note);
     return note;
@@ -65,6 +67,14 @@ export class NoteStore {
       ...(input.body !== undefined ? { body: input.body } : {}),
       ...(input.tags !== undefined ? { tags: input.tags } : {}),
     };
+    this.notes.set(id, updated);
+    return updated;
+  }
+
+  togglePin(id: string): Note | undefined {
+    const existing = this.notes.get(id);
+    if (!existing) return undefined;
+    const updated: Note = { ...existing, pinned: !existing.pinned };
     this.notes.set(id, updated);
     return updated;
   }
@@ -168,7 +178,12 @@ export class NoteStore {
     const term = query ? query.trim().toLowerCase() : '';
     const tagFilter = tag ? tag.trim().toLowerCase() : '';
     const all = [...this.notes.values()]
-      .sort((a, b) => a.createdAt - b.createdAt)
+      .sort((a, b) => {
+        // Pinned notes sort before unpinned; within each group preserve
+        // insertion order (createdAt ascending).
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        return a.createdAt - b.createdAt;
+      })
       .filter(
         (n) =>
           (term === '' ||

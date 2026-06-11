@@ -157,6 +157,15 @@ export function createNotesRouter(store: NoteStore): Router {
     res.status(204).end();
   });
 
+  router.patch('/:id/pin', (req: Request, res: Response) => {
+    const note = store.togglePin(req.params.id);
+    if (!note) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    res.json(note);
+  });
+
   // --- Attachment endpoints ---
 
   router.get('/:id/attachments', (req: Request, res: Response) => {

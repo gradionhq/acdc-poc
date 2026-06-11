@@ -266,4 +266,48 @@ describe('notes API', () => {
       .expect(400);
     expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
   });
+
+  it('creates a note with pinned=false by default', async () => {
+    const app = createApp();
+    const res = await request(app).post('/api/notes').send({ title: 't', body: 'b' }).expect(201);
+    expect(res.body.pinned).toBe(false);
+  });
+
+  it('PATCH /api/notes/:id/pin toggles pinned true then false', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b' })
+      .expect(201);
+    expect(created.body.pinned).toBe(false);
+
+    const pinned = await request(app).patch(`/api/notes/${created.body.id}/pin`).expect(200);
+    expect(pinned.body.pinned).toBe(true);
+
+    const unpinned = await request(app).patch(`/api/notes/${created.body.id}/pin`).expect(200);
+    expect(unpinned.body.pinned).toBe(false);
+  });
+
+  it('PATCH /api/notes/:id/pin returns 404 for unknown id', async () => {
+    const app = createApp();
+    const res = await request(app).patch('/api/notes/nope/pin').expect(404);
+    expect(res.body).toEqual({ error: 'not found' });
+  });
+
+  it('pinned note appears first in list response', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'first', body: 'b' }).expect(201);
+    const b = await request(app)
+      .post('/api/notes')
+      .send({ title: 'second', body: 'b' })
+      .expect(201);
+
+    // Pin the second (newer) note
+    await request(app).patch(`/api/notes/${b.body.id}/pin`).expect(200);
+
+    const list = await request(app).get('/api/notes').expect(200);
+    const titles = (list.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles[0]).toBe('second'); // pinned sorts first
+    expect(titles[1]).toBe('first');
+  });
 });

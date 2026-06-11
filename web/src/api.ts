@@ -3,6 +3,7 @@ export interface Note {
   title: string;
   body: string;
   tags: string[];
+  pinned: boolean;
 }
 
 function isNote(value: unknown): value is Note {
@@ -13,7 +14,8 @@ function isNote(value: unknown): value is Note {
     typeof v.title === 'string' &&
     typeof v.body === 'string' &&
     Array.isArray(v.tags) &&
-    (v.tags as unknown[]).every((t) => typeof t === 'string')
+    (v.tags as unknown[]).every((t) => typeof t === 'string') &&
+    typeof v.pinned === 'boolean'
   );
 }
 
@@ -82,6 +84,14 @@ export async function updateNote(
 export async function deleteNote(id: string): Promise<void> {
   const res = await fetch(`${base}/${id}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 404) throw new Error('failed to delete note');
+}
+
+export async function togglePin(id: string): Promise<Note> {
+  const res = await fetch(`${base}/${id}/pin`, { method: 'PATCH' });
+  if (!res.ok) throw new Error('failed to toggle pin');
+  const updated: unknown = await res.json();
+  if (!isNote(updated)) throw new Error('invalid note payload');
+  return updated;
 }
 
 export interface AttachmentMeta {

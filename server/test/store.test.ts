@@ -122,6 +122,40 @@ describe('NoteStore', () => {
     expect(result.total).toBe(2);
   });
 
+  it('creates a note with pinned=false by default', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    expect(n.pinned).toBe(false);
+  });
+
+  it('togglePin sets pinned=true then back to false', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    expect(n.pinned).toBe(false);
+    const pinned = store.togglePin(n.id);
+    expect(pinned?.pinned).toBe(true);
+    const unpinned = store.togglePin(n.id);
+    expect(unpinned?.pinned).toBe(false);
+  });
+
+  it('togglePin returns undefined for unknown id', () => {
+    const store = new NoteStore();
+    expect(store.togglePin('nope')).toBeUndefined();
+  });
+
+  it('pinned notes sort before unpinned in list results', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'A' });
+    const b = store.create({ title: 'b', body: 'B' });
+    const c = store.create({ title: 'c', body: 'C' });
+    // Pin the last note
+    store.togglePin(c.id);
+    const result = store.list(1, 10);
+    expect(result.items[0].id).toBe(c.id); // pinned → top
+    expect(result.items[1].id).toBe(a.id);
+    expect(result.items[2].id).toBe(b.id);
+  });
+
   it('combines query and tag filters', () => {
     const store = new NoteStore();
     store.create({ title: 'match title', body: 'b', tags: ['work'] });

@@ -4,6 +4,12 @@ export default defineConfig({
   testDir: './tests',
   outputDir: './test-results',
   reporter: [['html', { outputFolder: 'playwright-report', open: 'never' }]],
+  // Run all specs serially with a single worker. The entire e2e suite shares
+  // one long-lived in-memory server (no DB isolation between tests), so
+  // parallel workers race on the shared note list and cause flaky ordering /
+  // pagination assertions.
+  workers: 1,
+  fullyParallel: false,
   use: {
     baseURL: 'http://localhost:3000',
     video: 'on',
