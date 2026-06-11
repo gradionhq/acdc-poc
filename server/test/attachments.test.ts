@@ -343,7 +343,7 @@ describe('multi-file upload', () => {
       });
     }
     const res = await req.expect(400);
-    expect(res.body).toHaveProperty('error');
+    expect(res.body).toEqual({ error: 'too many files' });
   });
 });
 

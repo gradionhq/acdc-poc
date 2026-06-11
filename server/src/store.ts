@@ -29,6 +29,9 @@ export interface ListResult {
   total: number;
 }
 
+/** Valid values for the sort query parameter. */
+export type SortOrder = 'newest' | 'oldest' | 'title';
+
 export class NoteStore {
   private readonly notes = new Map<string, Note>();
   /**
@@ -208,15 +211,24 @@ export class NoteStore {
     this.seq = 0;
   }
 
-  list(page: number, pageSize: number, query?: string, tag?: string): ListResult {
+  list(
+    page: number,
+    pageSize: number,
+    query?: string,
+    tag?: string,
+    sort: SortOrder = 'newest',
+  ): ListResult {
     const term = query ? query.trim().toLowerCase() : '';
     const tagFilter = tag ? tag.trim().toLowerCase() : '';
     const all = [...this.notes.values()]
       .sort((a, b) => {
-        // Pinned notes sort before unpinned; within each group preserve
-        // insertion order (createdAt ascending).
+        // Pinned notes always sort before unpinned regardless of secondary sort.
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-        return a.createdAt - b.createdAt;
+        // Within each pin group apply the requested secondary sort.
+        if (sort === 'oldest') return a.createdAt - b.createdAt;
+        if (sort === 'title') return a.title.localeCompare(b.title);
+        // 'newest' (default): most recently created first
+        return b.createdAt - a.createdAt;
       })
       .filter(
         (n) =>
