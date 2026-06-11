@@ -1502,4 +1502,45 @@ describe('App — duplicate sort-aware navigation', () => {
 
     await waitFor(() => expect(screen.getByText('Copy of Banana')).toBeInTheDocument());
   });
+
+  it('duplicate while a search is active clears the search and navigates to the correct page', async () => {
+    // Use the search-aware mock (mockFetchSequence) so the `q` param is respected.
+    // 5 notes fill page 1; PAGE_SIZE=5. With "oldest" sort the copy (highest id)
+    // lands on the last page (page 2). If the bug is present, a filtered total of 1
+    // would incorrectly compute dest=1, leaving the user on page 1 where the copy
+    // is not visible.
+    mockFetchSequence();
+    render(<App />);
+
+    // Create 5 notes so that page 1 is exactly full with oldest sort.
+    const titles = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'];
+    for (const t of titles) {
+      await userEvent.type(screen.getByLabelText(/^title$/i), t);
+      await userEvent.type(screen.getByLabelText(/^body$/i), `${t} body`);
+      await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+      await waitFor(() => expect(screen.getByText(t)).toBeInTheDocument());
+    }
+
+    // Switch to oldest sort so the copy always goes to the last page (page 2).
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'oldest');
+    await waitFor(() => expect(screen.getByText('Apple')).toBeInTheDocument());
+
+    // Activate a search filter that matches only "Apple".
+    // The filtered total becomes 1, not 5.
+    const searchBox = screen.getByRole('textbox', { name: /search notes/i });
+    await userEvent.type(searchBox, 'Apple');
+    await waitFor(() => expect(screen.queryByText('Banana')).not.toBeInTheDocument());
+    expect(screen.getByText('Apple')).toBeInTheDocument();
+
+    // Duplicate Apple while the search is active.
+    // The copy ("Copy of Apple") has the highest id and under oldest sort appears last.
+    // With 6 total unfiltered notes across 2 pages (5+1), the copy is on page 2.
+    await userEvent.click(screen.getByRole('button', { name: /duplicate apple/i }));
+
+    // Search should be cleared and the copy should be visible on the correct page.
+    await waitFor(() => expect(screen.getByText('Copy of Apple')).toBeInTheDocument());
+    await waitFor(() => expect(searchBox).toHaveValue(''));
+    // On the last page the "Next" button must be disabled.
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
 });

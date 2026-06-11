@@ -300,10 +300,21 @@ export function App() {
       // The copy's position depends on the active sort order.
       // Use pageContainingNote so all three sort orders are handled correctly:
       // newest → page 1 (highest createdAt), oldest → last page, title → alphabetical rank.
-      const newTotal = total + 1;
+      // If a search filter is active, `total` only reflects the filtered count.
+      // Fetch the real (unfiltered) total so the destination page is computed
+      // against the full list, matching the same pattern used in onSubmit.
+      const unfilteredTotal = query !== '' ? (await listNotes(1, 1, '')).total : total;
+      if (query !== '') {
+        // Signal the debounce effect to skip its setPage(1) reset; onDuplicate
+        // will set the correct page directly after clearing the search.
+        skipDebouncePageResetRef.current = true;
+        setSearchInput('');
+        setQuery('');
+      }
+      const newTotal = unfilteredTotal + 1;
       const dest = await pageContainingNote(copy.id, newTotal, tagFilter, sort);
-      if (page === dest) {
-        await refresh(dest);
+      if (page === dest && query === '') {
+        await refresh(dest, '', tagFilter, sort);
       } else {
         setPage(dest);
       }
