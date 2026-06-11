@@ -255,6 +255,102 @@ describe('NoteStore', () => {
   });
 });
 
+describe('NoteStore — archive', () => {
+  it('creates a note with archived=false by default', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    expect(n.archived).toBe(false);
+  });
+
+  it('toggleArchive sets archived=true then back to false', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    const archived = store.toggleArchive(n.id);
+    expect(archived?.archived).toBe(true);
+    const unarchived = store.toggleArchive(n.id);
+    expect(unarchived?.archived).toBe(false);
+  });
+
+  it('toggleArchive returns undefined for unknown id', () => {
+    const store = new NoteStore();
+    expect(store.toggleArchive('nope')).toBeUndefined();
+  });
+
+  it('list() excludes archived notes by default', () => {
+    const store = new NoteStore();
+    store.create({ title: 'visible', body: 'b' });
+    const hidden = store.create({ title: 'hidden', body: 'b' });
+    store.toggleArchive(hidden.id);
+
+    const result = store.list(1, 10);
+    expect(result.total).toBe(1);
+    expect(result.items[0].title).toBe('visible');
+  });
+
+  it('list() with archived=true returns only archived notes', () => {
+    const store = new NoteStore();
+    store.create({ title: 'active', body: 'b' });
+    const archived = store.create({ title: 'archived', body: 'b' });
+    store.toggleArchive(archived.id);
+
+    const result = store.list(1, 10, undefined, undefined, 'newest', true);
+    expect(result.total).toBe(1);
+    expect(result.items[0].title).toBe('archived');
+  });
+
+  it('archived notes are excluded from search (q filter) in default view', () => {
+    const store = new NoteStore();
+    store.create({ title: 'findable', body: 'b' });
+    const archived = store.create({ title: 'findable archived', body: 'b' });
+    store.toggleArchive(archived.id);
+
+    const result = store.list(1, 10, 'findable');
+    expect(result.total).toBe(1);
+    expect(result.items[0].title).toBe('findable');
+  });
+
+  it('archived notes are excluded from tag filter in default view', () => {
+    const store = new NoteStore();
+    store.create({ title: 'tagged active', body: 'b', tags: ['work'] });
+    const archived = store.create({ title: 'tagged archived', body: 'b', tags: ['work'] });
+    store.toggleArchive(archived.id);
+
+    const result = store.list(1, 10, undefined, 'work');
+    expect(result.total).toBe(1);
+    expect(result.items[0].title).toBe('tagged active');
+  });
+
+  it('pagination is correct when archived notes are excluded', () => {
+    const store = new NoteStore();
+    for (let i = 0; i < 4; i++) {
+      store.create({ title: `note ${i}`, body: 'b' });
+    }
+    const archived = store.create({ title: 'archived', body: 'b' });
+    store.toggleArchive(archived.id);
+
+    const page1 = store.list(1, 2);
+    expect(page1.total).toBe(4);
+    expect(page1.items).toHaveLength(2);
+
+    const page2 = store.list(2, 2);
+    expect(page2.total).toBe(4);
+    expect(page2.items).toHaveLength(2);
+  });
+
+  it('pinned notes still sort first when archived notes excluded', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'b' });
+    const b = store.create({ title: 'b', body: 'b' });
+    const toArchive = store.create({ title: 'archived', body: 'b' });
+    store.toggleArchive(toArchive.id);
+    store.togglePin(b.id);
+
+    const result = store.list(1, 10);
+    expect(result.items[0].id).toBe(b.id); // pinned first
+    expect(result.items[1].id).toBe(a.id);
+  });
+});
+
 describe('NoteStore — deleteAttachment()', () => {
   it('returns undefined when the note does not exist', () => {
     const store = new NoteStore();
