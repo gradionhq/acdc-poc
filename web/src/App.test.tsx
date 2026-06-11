@@ -27,7 +27,7 @@ function mockFetchSequence() {
       const urlStr = url as string;
 
       // POST /api/notes/:id/attachments
-      if (init?.method === 'POST' && /\/api\/notes\/\d+\/attachments$/.test(urlStr)) {
+      if (init?.method === 'POST' && /\/api\/notes\/[^/]+\/attachments$/.test(urlStr)) {
         const noteId = urlStr.split('/').at(-2) ?? '';
         if (!notes.find((n) => n.id === noteId)) {
           return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
@@ -55,9 +55,12 @@ function mockFetchSequence() {
       // GET /api/notes/:id/attachments (no method = default GET)
       if (
         (init?.method === undefined || init?.method === 'GET') &&
-        /\/api\/notes\/\d+\/attachments$/.test(urlStr)
+        /\/api\/notes\/[^/]+\/attachments$/.test(urlStr)
       ) {
         const noteId = urlStr.split('/').at(-2) ?? '';
+        if (!notes.find((n) => n.id === noteId)) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
         const metas = (attachmentStore[noteId] ?? []).map((a) => ({
           filename: a.filename,
           contentType: a.contentType,
@@ -527,6 +530,34 @@ describe('App — attachments', () => {
 
     await waitFor(() => expect(screen.getByText('hello.txt')).toBeInTheDocument());
     expect(screen.queryByText(/no attachments yet/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('attachment mock — 404 contract', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('returns 404 for GET attachments on an unknown (non-numeric) note id', async () => {
+    const res = await fetch('/api/notes/non-numeric-id/attachments');
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('not found');
+  });
+
+  it('returns 404 for POST attachments on an unknown (non-numeric) note id', async () => {
+    const form = new FormData();
+    form.append('file', new File(['x'], 'x.txt', { type: 'text/plain' }));
+    const res = await fetch('/api/notes/non-numeric-id/attachments', {
+      method: 'POST',
+      body: form,
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('not found');
+  });
+
+  it('returns 404 for GET attachments on a valid-looking but non-existent numeric note id', async () => {
+    const res = await fetch('/api/notes/99999/attachments');
+    expect(res.status).toBe(404);
   });
 });
 

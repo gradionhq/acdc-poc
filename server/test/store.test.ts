@@ -134,3 +134,74 @@ describe('NoteStore', () => {
     expect(result.items[0].tags).toContain('work');
   });
 });
+
+describe('NoteStore — attachment security', () => {
+  it('strips double-quotes from filenames so Content-Disposition is safe', () => {
+    const store = new NoteStore();
+    const note = store.create({ title: 't', body: 'b' });
+    // Simulate a filename with a double-quote (would be header-injection risk)
+    const meta = store.addAttachment(note.id, {
+      filename: 'evil".txt',
+      contentType: 'text/plain',
+      data: Buffer.from('x'),
+    });
+    expect(meta).toBeDefined();
+    // Stored filename must not contain a raw double-quote
+    expect(meta!.filename).not.toContain('"');
+  });
+
+  it('strips control characters from filenames', () => {
+    const store = new NoteStore();
+    const note = store.create({ title: 't', body: 'b' });
+    const meta = store.addAttachment(note.id, {
+      // CR + LF would cause header injection / Node to throw ERR_INVALID_CHAR
+      filename: 'bad\r\nname.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('x'),
+    });
+    expect(meta).toBeDefined();
+    // eslint-disable-next-line no-control-regex
+    expect(meta!.filename).not.toMatch(/[\x00-\x1f]/);
+  });
+
+  it('disambiguates colliding filenames with a numeric suffix', () => {
+    const store = new NoteStore();
+    const note = store.create({ title: 't', body: 'b' });
+    const m1 = store.addAttachment(note.id, {
+      filename: 'dup.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('first'),
+    });
+    const m2 = store.addAttachment(note.id, {
+      filename: 'dup.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('second'),
+    });
+    expect(m1).toBeDefined();
+    expect(m2).toBeDefined();
+    expect(m1!.filename).not.toEqual(m2!.filename);
+    // Both must be retrievable
+    expect(store.listAttachments(note.id)).toHaveLength(2);
+  });
+
+  it('returns undefined once the per-note attachment cap is reached', () => {
+    const store = new NoteStore();
+    const note = store.create({ title: 't', body: 'b' });
+    const cap = NoteStore.MAX_ATTACHMENTS_PER_NOTE;
+    for (let i = 0; i < cap; i++) {
+      const meta = store.addAttachment(note.id, {
+        filename: `file${i}.txt`,
+        contentType: 'text/plain',
+        data: Buffer.from(`d${i}`),
+      });
+      expect(meta).toBeDefined();
+    }
+    // One beyond the cap must be rejected
+    const overflow = store.addAttachment(note.id, {
+      filename: 'overflow.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('x'),
+    });
+    expect(overflow).toBeUndefined();
+  });
+});

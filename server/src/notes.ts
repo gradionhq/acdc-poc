@@ -1,6 +1,23 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
-import type { NoteStore } from './store.js';
+import { NoteStore } from './store.js';
+
+/**
+ * Encode a filename for use in a Content-Disposition header following
+ * RFC 6266 / RFC 5987.  Emits both the quoted ASCII fallback (non-ASCII
+ * chars replaced with '?') and the UTF-8 percent-encoded filename* form
+ * so all compliant clients get the correct name.
+ */
+function contentDispositionFilename(filename: string): string {
+  // ASCII fallback: replace non-printable/non-ASCII with '?'
+  const ascii = filename.replace(/[^\x20-\x7e]/g, '?').replace(/["\\]/g, '_');
+  // RFC 5987 percent-encoding: encode everything outside unreserved chars
+  const encoded = encodeURIComponent(filename).replace(
+    /[!'()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
 
 /** 5 MB upper bound for individual file uploads. */
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -160,6 +177,13 @@ export function createNotesRouter(store: NoteStore): Router {
         res.status(404).json({ error: 'not found' });
         return;
       }
+      // Enforce per-note attachment cap before consuming upload bytes.
+      if (store.attachmentCount(req.params.id) >= NoteStore.MAX_ATTACHMENTS_PER_NOTE) {
+        res.status(413).json({
+          error: `attachment limit of ${NoteStore.MAX_ATTACHMENTS_PER_NOTE} per note reached`,
+        });
+        return;
+      }
       next();
     },
     upload.single('file'),
@@ -174,7 +198,8 @@ export function createNotesRouter(store: NoteStore): Router {
         data: req.file.buffer,
       });
       if (!meta) {
-        // Note was deleted between the pre-check and store write — treat as 404
+        // Note was deleted between the pre-check and store write — treat as 404.
+        // The cap check above ran before upload; a race here is benign for a PoC.
         res.status(404).json({ error: 'not found' });
         return;
       }
@@ -191,7 +216,7 @@ export function createNotesRouter(store: NoteStore): Router {
       return;
     }
     res.set('Content-Type', att.contentType);
-    res.set('Content-Disposition', `attachment; filename="${att.filename}"`);
+    res.set('Content-Disposition', contentDispositionFilename(att.filename));
     res.set('X-Content-Type-Options', 'nosniff');
     res.set('Content-Length', String(att.size));
     res.send(att.data);
