@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 
 // Helper: create a note and wait for the form to reset (title cleared).
 // The note may not be visible on the current page if the list is long.

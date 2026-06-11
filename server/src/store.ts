@@ -174,6 +174,13 @@ export class NoteStore {
     return result;
   }
 
+  /** Test-only: clear all notes and attachments and reset the id sequence. */
+  reset(): void {
+    this.notes.clear();
+    this.attachments.clear();
+    this.seq = 0;
+  }
+
   list(page: number, pageSize: number, query?: string, tag?: string): ListResult {
     const term = query ? query.trim().toLowerCase() : '';
     const tagFilter = tag ? tag.trim().toLowerCase() : '';
