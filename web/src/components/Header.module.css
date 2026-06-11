@@ -30,6 +30,12 @@
   gap: var(--space-3);
 }
 
+/* ── Icon inside a Button (tag icon etc.) ────────────────────── */
+
+.btnIcon {
+  flex-shrink: 0;
+}
+
 /* ── Icon button (theme toggle, help toggle, close) ──────────── */
 
 .iconButton {

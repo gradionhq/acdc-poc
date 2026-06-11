@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { FileText, SearchX } from 'lucide-react';
 import { Button } from './Button';
 import { NoteCard, type NoteCardProps } from './NoteCard';
 import type { Note } from '../api';
@@ -65,9 +66,13 @@ export function NoteList({
       {showEmptyState && (
         <div className={styles.emptyState} role="status">
           {isFilterActive ? (
-            <p>No notes match your search.</p>
+            <>
+              <SearchX size={40} className={styles.emptyIcon} aria-hidden="true" />
+              <p>No notes match your search.</p>
+            </>
           ) : (
             <>
+              <FileText size={40} className={styles.emptyIcon} aria-hidden="true" />
               <p>No notes yet. Create your first note above!</p>
               <Button
                 variant="primary"

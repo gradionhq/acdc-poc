@@ -73,3 +73,8 @@
   margin: 0;
   font-size: var(--font-size-base);
 }
+
+.emptyIcon {
+  color: var(--color-text-subtle);
+  flex-shrink: 0;
+}

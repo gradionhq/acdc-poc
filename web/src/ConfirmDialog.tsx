@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { Button } from './components/Button';
 import styles from './ConfirmDialog.module.css';
 
@@ -101,9 +102,12 @@ export function ConfirmDialog({
       open
     >
       <div className={styles.dialog}>
-        <h2 id={titleId} className={styles.title}>
-          {title}
-        </h2>
+        <div className={styles.titleRow}>
+          <AlertTriangle size={20} className={styles.warningIcon} aria-hidden="true" />
+          <h2 id={titleId} className={styles.title}>
+            {title}
+          </h2>
+        </div>
         <p className={styles.message}>{message}</p>
         <div className={styles.actions}>
           {/* autoFocus moves focus into the dialog when it opens (cancel is safe default). */}
