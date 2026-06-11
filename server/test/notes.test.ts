@@ -87,7 +87,7 @@ describe('notes API', () => {
       .send({ title: 't', body: 'b' })
       .expect(201);
     const res = await request(app).put(`/api/notes/${created.body.id}`).send({}).expect(400);
-    expect(res.body).toEqual({ error: 'at least one of title or body is required' });
+    expect(res.body).toEqual({ error: 'at least one of title, body, or tags is required' });
   });
 
   it('returns 400 when PUT payload is not an object', async () => {
@@ -154,5 +154,116 @@ describe('notes API', () => {
     expect(fetched.body.title).toBe('after');
     const list = await request(app).get('/api/notes').expect(200);
     expect((list.body as Array<{ title: string }>).some((n) => n.title === 'after')).toBe(true);
+  });
+
+  it('creates a note with tags and returns them', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: ['alpha', 'beta'] })
+      .expect(201);
+    expect(res.body.tags).toEqual(['alpha', 'beta']);
+  });
+
+  it('creates a note with empty tags array when tags are omitted', async () => {
+    const app = createApp();
+    const res = await request(app).post('/api/notes').send({ title: 't', body: 'b' }).expect(201);
+    expect(res.body.tags).toEqual([]);
+  });
+
+  it('rejects create with invalid tags (non-array)', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: 'not-an-array' })
+      .expect(400);
+    expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
+  });
+
+  it('rejects create with tags containing empty strings', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: ['valid', ''] })
+      .expect(400);
+    expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
+  });
+
+  it('updates tags via PUT and returns updated note', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: ['old'] })
+      .expect(201);
+    const updated = await request(app)
+      .put(`/api/notes/${created.body.id}`)
+      .send({ tags: ['new', 'tag2'] })
+      .expect(200);
+    expect(updated.body.tags).toEqual(['new', 'tag2']);
+  });
+
+  it('rejects PUT with invalid tags', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b' })
+      .expect(201);
+    const res = await request(app)
+      .put(`/api/notes/${created.body.id}`)
+      .send({ tags: [42] })
+      .expect(400);
+    expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
+  });
+
+  it('filters notes by tag param', async () => {
+    const app = createApp();
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'tagged', body: 'b', tags: ['work'] })
+      .expect(201);
+    await request(app).post('/api/notes').send({ title: 'untagged', body: 'b' }).expect(201);
+
+    const res = await request(app).get('/api/notes?tag=work').expect(200);
+    expect(res.headers['x-total-count']).toBe('1');
+    expect(res.body).toHaveLength(1);
+    expect((res.body as Array<{ title: string }>)[0].title).toBe('tagged');
+  });
+
+  it('trims whitespace from tags before persisting', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: [' work ', '  alpha  '] })
+      .expect(201);
+    expect(res.body.tags).toEqual(['work', 'alpha']);
+  });
+
+  it('deduplicates tags before persisting', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: ['alpha', 'beta', 'alpha'] })
+      .expect(201);
+    expect(res.body.tags).toEqual(['alpha', 'beta']);
+  });
+
+  it('trims stored tags so ?tag= filter matches', async () => {
+    const app = createApp();
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'padded', body: 'b', tags: [' work '] })
+      .expect(201);
+    const res = await request(app).get('/api/notes?tag=work').expect(200);
+    expect(res.headers['x-total-count']).toBe('1');
+    expect((res.body as Array<{ title: string }>)[0].title).toBe('padded');
+  });
+
+  it('rejects create with tags containing whitespace-only strings', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b', tags: ['valid', '   '] })
+      .expect(400);
+    expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
   });
 });

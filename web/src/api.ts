@@ -2,12 +2,19 @@ export interface Note {
   id: string;
   title: string;
   body: string;
+  tags: string[];
 }
 
 function isNote(value: unknown): value is Note {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
-  return typeof v.id === 'string' && typeof v.title === 'string' && typeof v.body === 'string';
+  return (
+    typeof v.id === 'string' &&
+    typeof v.title === 'string' &&
+    typeof v.body === 'string' &&
+    Array.isArray(v.tags) &&
+    (v.tags as unknown[]).every((t) => typeof t === 'string')
+  );
 }
 
 export interface NotesPage {
@@ -17,13 +24,21 @@ export interface NotesPage {
 
 const base = '/api/notes';
 
-export async function listNotes(page = 1, pageSize = 5, query?: string): Promise<NotesPage> {
+export async function listNotes(
+  page = 1,
+  pageSize = 5,
+  query?: string,
+  tag?: string,
+): Promise<NotesPage> {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
   });
   if (query !== undefined && query !== '') {
     params.set('q', query);
+  }
+  if (tag !== undefined && tag !== '') {
+    params.set('tag', tag);
   }
   const res = await fetch(`${base}?${params.toString()}`);
   if (!res.ok) throw new Error('failed to load notes');
@@ -33,7 +48,11 @@ export async function listNotes(page = 1, pageSize = 5, query?: string): Promise
   return { notes, total };
 }
 
-export async function createNote(input: { title: string; body: string }): Promise<Note> {
+export async function createNote(input: {
+  title: string;
+  body: string;
+  tags?: string[];
+}): Promise<Note> {
   const res = await fetch(base, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -47,7 +66,7 @@ export async function createNote(input: { title: string; body: string }): Promis
 
 export async function updateNote(
   id: string,
-  input: { title?: string; body?: string },
+  input: { title?: string; body?: string; tags?: string[] },
 ): Promise<Note> {
   const res = await fetch(`${base}/${id}`, {
     method: 'PUT',

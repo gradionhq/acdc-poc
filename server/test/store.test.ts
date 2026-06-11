@@ -75,4 +75,62 @@ describe('NoteStore', () => {
     expect(store.delete(n.id)).toBe(true);
     expect(store.delete(n.id)).toBe(false);
   });
+
+  it('creates a note with tags and returns them', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b', tags: ['foo', 'bar'] });
+    expect(n.tags).toEqual(['foo', 'bar']);
+    expect(store.get(n.id)?.tags).toEqual(['foo', 'bar']);
+  });
+
+  it('creates a note with empty tags when tags are omitted', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    expect(n.tags).toEqual([]);
+  });
+
+  it('updates tags via update()', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b', tags: ['old'] });
+    const updated = store.update(n.id, { tags: ['new1', 'new2'] });
+    expect(updated?.tags).toEqual(['new1', 'new2']);
+  });
+
+  it('filters notes by tag (case-insensitive exact match)', () => {
+    const store = new NoteStore();
+    store.create({ title: 'a', body: 'b', tags: ['work'] });
+    store.create({ title: 'c', body: 'd', tags: ['personal'] });
+    store.create({ title: 'e', body: 'f' });
+
+    const result = store.list(1, 10, undefined, 'work');
+    expect(result.total).toBe(1);
+    expect(result.items[0].title).toBe('a');
+  });
+
+  it('tag filter is case-insensitive', () => {
+    const store = new NoteStore();
+    store.create({ title: 'a', body: 'b', tags: ['Work'] });
+    const result = store.list(1, 10, undefined, 'work');
+    expect(result.total).toBe(1);
+  });
+
+  it('returns all notes when tag filter is empty', () => {
+    const store = new NoteStore();
+    store.create({ title: 'a', body: 'b', tags: ['work'] });
+    store.create({ title: 'c', body: 'd' });
+    const result = store.list(1, 10, undefined, '');
+    expect(result.total).toBe(2);
+  });
+
+  it('combines query and tag filters', () => {
+    const store = new NoteStore();
+    store.create({ title: 'match title', body: 'b', tags: ['work'] });
+    store.create({ title: 'match title', body: 'b', tags: ['personal'] });
+    store.create({ title: 'other', body: 'b', tags: ['work'] });
+
+    const result = store.list(1, 10, 'match', 'work');
+    expect(result.total).toBe(1);
+    expect(result.items[0].title).toBe('match title');
+    expect(result.items[0].tags).toContain('work');
+  });
 });

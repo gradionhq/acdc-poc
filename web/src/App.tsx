@@ -4,18 +4,33 @@ import { createNote, deleteNote, listNotes, updateNote, type Note } from './api'
 const PAGE_SIZE = 5;
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** Parse a comma-separated string into a trimmed, non-empty, deduplicated string array. */
+function parseTags(raw: string): string[] {
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t !== ''),
+    ),
+  ];
+}
+
 export function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
+  const [editTagsInput, setEditTagsInput] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
 
   // Monotonically increasing counter; each refresh call captures its own id
   // and only applies its result if no newer request has been issued since.
@@ -27,10 +42,10 @@ export function App() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  async function refresh(p = page, q = query) {
+  async function refresh(p = page, q = query, tf = tagFilter) {
     const seq = ++reqSeqRef.current;
     try {
-      const result = await listNotes(p, PAGE_SIZE, q);
+      const result = await listNotes(p, PAGE_SIZE, q, tf);
       if (seq !== reqSeqRef.current) return; // stale — a newer request is in flight
       setNotes(result.notes);
       setTotal(result.total);
@@ -41,9 +56,9 @@ export function App() {
   }
 
   useEffect(() => {
-    void refresh(page, query);
+    void refresh(page, query, tagFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, query]);
+  }, [page, query, tagFilter]);
 
   // Debounce search input: update `query` after SEARCH_DEBOUNCE_MS of inactivity.
   // Reset to page 1 whenever the query changes so results are always from the start.
@@ -63,9 +78,10 @@ export function App() {
     e.preventDefault();
     if (!title.trim() || !body.trim()) return;
     try {
-      await createNote({ title, body });
+      await createNote({ title, body, tags: parseTags(tagsInput) });
       setTitle('');
       setBody('');
+      setTagsInput('');
       setError(null);
       // If a search filter is active, clear it before navigating so the new
       // note is always visible. With a filter active, `total` reflects only
@@ -98,21 +114,24 @@ export function App() {
     setEditingId(note.id);
     setEditTitle(note.title);
     setEditBody(note.body);
+    setEditTagsInput(note.tags.join(', '));
   }
 
   function onEditCancel() {
     setEditingId(null);
     setEditTitle('');
     setEditBody('');
+    setEditTagsInput('');
   }
 
   async function onEditSave(id: string) {
     if (!editTitle.trim() || !editBody.trim()) return;
     try {
-      await updateNote(id, { title: editTitle, body: editBody });
+      await updateNote(id, { title: editTitle, body: editBody, tags: parseTags(editTagsInput) });
       setEditingId(null);
       setEditTitle('');
       setEditBody('');
+      setEditTagsInput('');
       setError(null);
       await refresh(page);
     } catch (e) {
@@ -151,6 +170,18 @@ export function App() {
           onChange={(e) => setSearchInput(e.target.value)}
         />
       </label>
+      <label>
+        Filter by tag
+        <input
+          aria-label="Filter by tag"
+          placeholder="Filter by tag…"
+          value={tagFilter}
+          onChange={(e) => {
+            setPage(1);
+            setTagFilter(e.target.value);
+          }}
+        />
+      </label>
       <form onSubmit={onSubmit}>
         <label>
           Title
@@ -159,6 +190,15 @@ export function App() {
         <label>
           Body
           <textarea value={body} onChange={(e) => setBody(e.target.value)} />
+        </label>
+        <label>
+          Tags
+          <input
+            aria-label="Tags"
+            placeholder="comma-separated tags"
+            value={tagsInput}
+            onChange={(e) => setTagsInput(e.target.value)}
+          />
         </label>
         <button type="submit">Add note</button>
       </form>
@@ -182,12 +222,30 @@ export function App() {
                   onChange={(e) => setEditBody(e.target.value)}
                 />
               </label>
+              <label>
+                Edit tags
+                <input
+                  aria-label="Edit tags"
+                  placeholder="comma-separated tags"
+                  value={editTagsInput}
+                  onChange={(e) => setEditTagsInput(e.target.value)}
+                />
+              </label>
               <button onClick={() => void onEditSave(n.id)}>Save</button>
               <button onClick={onEditCancel}>Cancel</button>
             </li>
           ) : (
             <li key={n.id}>
               <strong>{n.title}</strong>: {n.body}
+              {n.tags.length > 0 && (
+                <span aria-label="Tags">
+                  {n.tags.map((tag) => (
+                    <span key={tag} data-tag={tag}>
+                      {tag}
+                    </span>
+                  ))}
+                </span>
+              )}
               <button onClick={() => onEditStart(n)}>Edit</button>
               <button onClick={() => void onDelete(n.id)}>Delete</button>
             </li>

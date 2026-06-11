@@ -4,11 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { listNotes } from './api';
 
-function buildResponse(
-  notes: Array<{ id: string; title: string; body: string }>,
-  page = 1,
-  pageSize = 5,
-) {
+type MockNote = { id: string; title: string; body: string; tags: string[] };
+
+function buildResponse(notes: MockNote[], page = 1, pageSize = 5) {
   const start = (page - 1) * pageSize;
   const items = notes.slice(start, start + pageSize);
   return new Response(JSON.stringify(items), {
@@ -18,26 +16,35 @@ function buildResponse(
 }
 
 function mockFetchSequence() {
-  let notes: Array<{ id: string; title: string; body: string }> = [];
+  let notes: MockNote[] = [];
   let seq = 0;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'POST') {
-        const b = JSON.parse(String(init.body)) as { title: string; body: string };
-        const n = { id: String(++seq), title: b.title, body: b.body };
+        const b = JSON.parse(String(init.body)) as {
+          title: string;
+          body: string;
+          tags?: string[];
+        };
+        const n: MockNote = { id: String(++seq), title: b.title, body: b.body, tags: b.tags ?? [] };
         notes.push(n);
         return new Response(JSON.stringify(n), { status: 201 });
       }
       if (init?.method === 'PUT') {
         const id = (url as string).split('/').pop();
-        const b = JSON.parse(String(init.body)) as { title?: string; body?: string };
+        const b = JSON.parse(String(init.body)) as {
+          title?: string;
+          body?: string;
+          tags?: string[];
+        };
         notes = notes.map((n) =>
           n.id === id
             ? {
                 ...n,
                 ...(b.title !== undefined ? { title: b.title } : {}),
                 ...(b.body !== undefined ? { body: b.body } : {}),
+                ...(b.tags !== undefined ? { tags: b.tags } : {}),
               }
             : n,
         );
@@ -51,18 +58,21 @@ function mockFetchSequence() {
         notes = notes.filter((n) => n.id !== id);
         return new Response(null, { status: 204 });
       }
-      // Parse page/pageSize/q from URL
+      // Parse page/pageSize/q/tag from URL
       const urlObj = new URL(url as string, 'http://localhost');
       const page = Number(urlObj.searchParams.get('page') ?? '1');
       const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
       const q = urlObj.searchParams.get('q') ?? '';
+      const tagParam = urlObj.searchParams.get('tag') ?? '';
       const term = q.trim().toLowerCase();
-      const filtered =
-        term === ''
-          ? notes
-          : notes.filter(
-              (n) => n.title.toLowerCase().includes(term) || n.body.toLowerCase().includes(term),
-            );
+      const tagTerm = tagParam.trim().toLowerCase();
+      const filtered = notes.filter(
+        (n) =>
+          (term === '' ||
+            n.title.toLowerCase().includes(term) ||
+            n.body.toLowerCase().includes(term)) &&
+          (tagTerm === '' || n.tags.some((t) => t.toLowerCase() === tagTerm)),
+      );
       const start = (page - 1) * pageSize;
       const items = filtered.slice(start, start + pageSize);
       return new Response(JSON.stringify(items), {
@@ -150,12 +160,13 @@ describe('App', () => {
 
   it('disables Previous on page 1 and enables Next when there are multiple pages', async () => {
     // Pre-populate with 6 notes via mock so total > pageSize (5)
-    let notes: Array<{ id: string; title: string; body: string }> = Array.from(
+    let notes: Array<{ id: string; title: string; body: string; tags: string[] }> = Array.from(
       { length: 6 },
       (_, i) => ({
         id: String(i + 1),
         title: `Note ${i + 1}`,
         body: `Body ${i + 1}`,
+        tags: [],
       }),
     );
     vi.stubGlobal(
@@ -192,6 +203,7 @@ describe('App', () => {
       id: String(i + 1),
       title: `Existing ${i + 1}`,
       body: `body ${i + 1}`,
+      tags: [] as string[],
     }));
     const notes = [...initialNotes];
     let nextId = initialNotes.length + 1;
@@ -199,8 +211,12 @@ describe('App', () => {
       'fetch',
       vi.fn(async (url: string, init?: RequestInit) => {
         if (init?.method === 'POST') {
-          const b = JSON.parse(String(init.body)) as { title: string; body: string };
-          const n = { id: String(nextId++), title: b.title, body: b.body };
+          const b = JSON.parse(String(init.body)) as {
+            title: string;
+            body: string;
+            tags?: string[];
+          };
+          const n = { id: String(nextId++), title: b.title, body: b.body, tags: b.tags ?? [] };
           notes.push(n);
           return new Response(JSON.stringify(n), { status: 201 });
         }
@@ -230,6 +246,7 @@ describe('App', () => {
       id: String(i + 1),
       title: `Note ${i + 1}`,
       body: `Body ${i + 1}`,
+      tags: [] as string[],
     }));
     vi.stubGlobal(
       'fetch',
@@ -339,6 +356,81 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByText('Unrelated note')).toBeInTheDocument());
     await waitFor(() => expect(searchBox).toHaveValue(''));
     expect(screen.getByText('Beta existing')).toBeInTheDocument();
+  });
+});
+
+describe('App — tags', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('creates a note with tags and renders them in the list', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Tagged note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'note body');
+    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'alpha, beta');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    await waitFor(() => expect(screen.getByText('Tagged note')).toBeInTheDocument());
+    expect(screen.getByText('alpha')).toBeInTheDocument();
+    expect(screen.getByText('beta')).toBeInTheDocument();
+  });
+
+  it('edits tags on a note and shows updated tags', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Note for tags edit');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'oldtag');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    await waitFor(() => expect(screen.getByText('Note for tags edit')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /edit/i }));
+
+    const editTagsInput = screen.getByRole('textbox', { name: /edit tags/i });
+    await userEvent.clear(editTagsInput);
+    await userEvent.type(editTagsInput, 'newtag');
+
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(screen.getByText('newtag')).toBeInTheDocument());
+  });
+
+  it('filters by tag when tag filter input is filled', async () => {
+    render(<App />);
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Work note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'work');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    await waitFor(() => expect(screen.getByText('Work note')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Personal note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'personal');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    await waitFor(() => expect(screen.getByText('Personal note')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByRole('textbox', { name: /filter by tag/i }), 'work');
+    await waitFor(() => expect(screen.queryByText('Personal note')).not.toBeInTheDocument());
+    expect(screen.getByText('Work note')).toBeInTheDocument();
+  });
+});
+
+describe('App — tag deduplication', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('deduplicates tags before sending to server', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Dup tag note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'alpha, beta, alpha');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // Only two distinct tags should appear in the rendered note — no duplicate spans
+    await waitFor(() => expect(screen.getByText('Dup tag note')).toBeInTheDocument());
+    const tagSpans = screen.getAllByText('alpha');
+    expect(tagSpans).toHaveLength(1);
   });
 });
 
