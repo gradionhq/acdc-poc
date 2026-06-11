@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { listNotes, type NoteColor } from './api';
@@ -10,6 +10,7 @@ type MockNote = {
   body: string;
   tags: string[];
   pinned: boolean;
+  archived: boolean;
   color: NoteColor;
 };
 
@@ -112,6 +113,16 @@ function mockFetchSequence() {
         return new Response(JSON.stringify(notes[idx]), { status: 200 });
       }
 
+      if (init?.method === 'PATCH' && /\/api\/notes\/[^/]+\/archive$/.test(urlStr)) {
+        const noteId = urlStr.split('/').at(-2) ?? '';
+        const idx = notes.findIndex((n) => n.id === noteId);
+        if (idx === -1) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        notes[idx] = { ...notes[idx], archived: !notes[idx].archived };
+        return new Response(JSON.stringify(notes[idx]), { status: 200 });
+      }
+
       // POST /api/notes/:id/duplicate
       if (init?.method === 'POST' && /\/api\/notes\/[^/]+\/duplicate$/.test(urlStr)) {
         const noteId = urlStr.split('/').at(-2) ?? '';
@@ -125,6 +136,7 @@ function mockFetchSequence() {
           body: source.body,
           tags: [...source.tags],
           pinned: false,
+          archived: false,
           color: source.color,
         };
         notes.push(copy);
@@ -144,6 +156,7 @@ function mockFetchSequence() {
           body: b.body,
           tags: b.tags ?? [],
           pinned: false,
+          archived: false,
           color: b.color ?? 'none',
         };
         notes.push(n);
@@ -178,18 +191,20 @@ function mockFetchSequence() {
         notes = notes.filter((n) => n.id !== id);
         return new Response(null, { status: 204 });
       }
-      // Parse page/pageSize/q/tag/sort from URL
+      // Parse page/pageSize/q/tag/sort/archived from URL
       const urlObj = new URL(urlStr, 'http://localhost');
       const page = Number(urlObj.searchParams.get('page') ?? '1');
       const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
       const q = urlObj.searchParams.get('q') ?? '';
       const tagParam = urlObj.searchParams.get('tag') ?? '';
       const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
+      const archivedParam = urlObj.searchParams.get('archived') === 'true';
       const term = q.trim().toLowerCase();
       const tagTerm = tagParam.trim().toLowerCase();
       const filtered = notes
         .filter(
           (n) =>
+            n.archived === archivedParam &&
             (term === '' ||
               n.title.toLowerCase().includes(term) ||
               n.body.toLowerCase().includes(term)) &&
@@ -367,6 +382,7 @@ describe('App', () => {
       body: string;
       tags: string[];
       pinned: boolean;
+      archived: boolean;
       color: NoteColor;
     }> = Array.from({ length: 6 }, (_, i) => ({
       id: String(i + 1),
@@ -374,6 +390,7 @@ describe('App', () => {
       body: `Body ${i + 1}`,
       tags: [],
       pinned: false,
+      archived: false,
       color: 'none' as NoteColor,
     }));
     vi.stubGlobal(
@@ -413,6 +430,7 @@ describe('App', () => {
       body: `body ${i + 1}`,
       tags: [] as string[],
       pinned: false,
+      archived: false,
       color: 'none' as NoteColor,
     }));
     const notes = [...initialNotes];
@@ -433,6 +451,7 @@ describe('App', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            archived: false,
             color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
@@ -477,6 +496,7 @@ describe('App', () => {
       body: `body ${i + 1}`,
       tags: [] as string[],
       pinned: false,
+      archived: false,
       color: 'none' as NoteColor,
     }));
     const notes = [...initialNotes];
@@ -497,6 +517,7 @@ describe('App', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            archived: false,
             color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
@@ -547,6 +568,7 @@ describe('App', () => {
         body: 'b',
         tags: [] as string[],
         pinned: false,
+        archived: false,
         color: 'none' as NoteColor,
       },
       {
@@ -555,6 +577,7 @@ describe('App', () => {
         body: 'b',
         tags: [] as string[],
         pinned: false,
+        archived: false,
         color: 'none' as NoteColor,
       },
       {
@@ -563,6 +586,7 @@ describe('App', () => {
         body: 'b',
         tags: [] as string[],
         pinned: false,
+        archived: false,
         color: 'none' as NoteColor,
       },
       {
@@ -571,6 +595,7 @@ describe('App', () => {
         body: 'b',
         tags: [] as string[],
         pinned: false,
+        archived: false,
         color: 'none' as NoteColor,
       },
       {
@@ -579,6 +604,7 @@ describe('App', () => {
         body: 'b',
         tags: [] as string[],
         pinned: false,
+        archived: false,
         color: 'none' as NoteColor,
       },
     ];
@@ -600,6 +626,7 @@ describe('App', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            archived: false,
             color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
@@ -648,6 +675,7 @@ describe('App', () => {
       body: `Body ${i + 1}`,
       tags: [] as string[],
       pinned: false,
+      archived: false,
       color: 'none' as NoteColor,
     }));
     vi.stubGlobal(
@@ -906,6 +934,7 @@ describe('App — pin', () => {
       body: `body ${i + 1}`,
       tags: [] as string[],
       pinned: false,
+      archived: false,
       color: 'none' as NoteColor,
     }));
     const notes = initialNotes.map((n) => ({ ...n }));
@@ -1535,6 +1564,99 @@ describe('App — duplicate', () => {
   });
 });
 
+describe('App — archive', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('shows an Archive button for each active note', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Archive me');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Archive me')).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: /^archive archive me$/i })).toBeInTheDocument();
+  });
+
+  it('archiving a note removes it from the active list', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'To Archive');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('To Archive')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /^archive to archive$/i }));
+    await waitFor(() => expect(screen.queryByText('To Archive')).not.toBeInTheDocument());
+  });
+
+  it('shows Archived notes view toggle button', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /show archived notes/i })).toBeInTheDocument(),
+    );
+  });
+
+  it('clicking the archived toggle shows archived notes and Unarchive button', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Will Archive');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Will Archive')).toBeInTheDocument());
+
+    // Archive the note
+    await userEvent.click(screen.getByRole('button', { name: /^archive will archive$/i }));
+    await waitFor(() => expect(screen.queryByText('Will Archive')).not.toBeInTheDocument());
+
+    // Switch to archived view
+    await userEvent.click(screen.getByRole('button', { name: /show archived notes/i }));
+    await waitFor(() => expect(screen.getByText('Will Archive')).toBeInTheDocument());
+
+    // Should show Unarchive button in archived view
+    expect(screen.getByRole('button', { name: /^unarchive will archive$/i })).toBeInTheDocument();
+  });
+
+  it('unarchiving a note from the archived view removes it from the archived list', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Unarchive me');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Unarchive me')).toBeInTheDocument());
+
+    // Archive it
+    await userEvent.click(screen.getByRole('button', { name: /^archive unarchive me$/i }));
+    await waitFor(() => expect(screen.queryByText('Unarchive me')).not.toBeInTheDocument());
+
+    // Switch to archived view
+    await userEvent.click(screen.getByRole('button', { name: /show archived notes/i }));
+    await waitFor(() => expect(screen.getByText('Unarchive me')).toBeInTheDocument());
+
+    // Unarchive it
+    await userEvent.click(screen.getByRole('button', { name: /^unarchive unarchive me$/i }));
+    await waitFor(() => expect(screen.queryByText('Unarchive me')).not.toBeInTheDocument());
+  });
+
+  it('archived notes do not appear in active view search results', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Searchable active');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Searchable active')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Searchable archived');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Searchable archived')).toBeInTheDocument());
+
+    // Archive the second note
+    await userEvent.click(screen.getByRole('button', { name: /^archive searchable archived$/i }));
+    await waitFor(() => expect(screen.queryByText('Searchable archived')).not.toBeInTheDocument());
+
+    // Search for "Searchable" — should only find the active one
+    await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'Searchable');
+    await waitFor(() => expect(screen.queryByText('Searchable archived')).not.toBeInTheDocument());
+    expect(screen.getByText('Searchable active')).toBeInTheDocument();
+  });
+});
+
 describe('App — sort', () => {
   beforeEach(() => mockFetchSequence());
 
@@ -1585,12 +1707,19 @@ describe('App — title-sort create with duplicate titles', () => {
     // second one (higher id) will appear on whichever page its rank lands on —
     // the test verifies the app navigates away from page 1 and shows the new note.
     const initialNotes = [
-      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
-      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
-      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
-      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
-      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
-      { id: '6', title: 'Zebra', body: 'b', tags: [] as string[], pinned: false },
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      {
+        id: '5',
+        title: 'Elderberry',
+        body: 'b',
+        tags: [] as string[],
+        pinned: false,
+        archived: false,
+      },
+      { id: '6', title: 'Zebra', body: 'b', tags: [] as string[], pinned: false, archived: false },
     ];
     const notes = [...initialNotes];
     let nextId = 7;
@@ -1610,6 +1739,7 @@ describe('App — title-sort create with duplicate titles', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            archived: false,
             color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
@@ -1658,11 +1788,18 @@ describe('App — duplicate sort-aware navigation', () => {
   function makeSortAwareSetup() {
     // 5 notes: Apple–Elderberry, so page 1 is exactly full.
     const initialNotes = [
-      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false },
-      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false },
-      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false },
-      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false },
-      { id: '5', title: 'Elderberry', body: 'b', tags: [] as string[], pinned: false },
+      { id: '1', title: 'Apple', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '2', title: 'Banana', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '3', title: 'Cherry', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      { id: '4', title: 'Date', body: 'b', tags: [] as string[], pinned: false, archived: false },
+      {
+        id: '5',
+        title: 'Elderberry',
+        body: 'b',
+        tags: [] as string[],
+        pinned: false,
+        archived: false,
+      },
     ];
     const notes = [...initialNotes];
     let nextId = initialNotes.length + 1;
@@ -1683,6 +1820,7 @@ describe('App — duplicate sort-aware navigation', () => {
             body: source.body,
             tags: [...source.tags],
             pinned: false,
+            archived: false,
             color: 'none' as NoteColor,
           };
           notes.push(copy);
@@ -1822,6 +1960,7 @@ describe('App — create with pinned notes', () => {
       body: `body ${i + 1}`,
       tags: [] as string[],
       pinned: true,
+      archived: false,
     }));
     const notes = [...pinned];
     let nextId = pinned.length + 1;
@@ -1842,6 +1981,7 @@ describe('App — create with pinned notes', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            archived: false,
             color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
@@ -1895,6 +2035,7 @@ describe('App — create with pinned notes', () => {
       body: `body ${i + 1}`,
       tags: [] as string[],
       pinned: true,
+      archived: false,
     }));
     const notes = [...pinned];
     let nextId = pinned.length + 1;
@@ -1915,6 +2056,7 @@ describe('App — create with pinned notes', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            archived: false,
             color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
@@ -2038,5 +2180,152 @@ describe('App — create and duplicate with both query and tag filter active', (
     expect(screen.getByRole('textbox', { name: /filter by tag/i })).toHaveValue('');
     // On the last page (6 total, page 2 shows the copy)
     expect(screen.getByRole('button', { name: /next/i })).toBeDisabled();
+  });
+});
+
+describe('App — keyboard shortcuts', () => {
+  beforeEach(() => mockFetchSequence());
+
+  function pressKey(
+    key: string,
+    target: Element = document.body,
+    modifiers: { ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean } = {},
+  ) {
+    fireEvent.keyDown(target, { key, bubbles: true, cancelable: true, ...modifiers });
+  }
+
+  it('pressing "n" outside a text field focuses the new-note title input', async () => {
+    // jsdom does not implement scrollIntoView; stub it to prevent unhandled errors.
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+    render(<App />);
+    // Wait for initial render
+    await waitFor(() => expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument());
+
+    act(() => {
+      pressKey('n');
+    });
+
+    await waitFor(() => expect(screen.getByLabelText(/^title$/i)).toHaveFocus());
+  });
+
+  it('pressing "/" outside a text field focuses the search input', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /search notes/i })).toBeInTheDocument(),
+    );
+
+    act(() => {
+      pressKey('/');
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /search notes/i })).toHaveFocus(),
+    );
+  });
+
+  it('pressing "?" opens the keyboard shortcuts help panel', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Show keyboard shortcuts')).toBeInTheDocument(),
+    );
+
+    act(() => {
+      pressKey('?');
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeInTheDocument(),
+    );
+  });
+
+  it('pressing "?" again closes the help panel', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Show keyboard shortcuts')).toBeInTheDocument(),
+    );
+
+    act(() => {
+      pressKey('?');
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeInTheDocument(),
+    );
+
+    act(() => {
+      pressKey('?');
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('pressing Escape closes the help panel when it is open', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByLabelText('Show keyboard shortcuts')).toBeInTheDocument(),
+    );
+
+    // Open help panel
+    act(() => {
+      pressKey('?');
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeInTheDocument(),
+    );
+
+    // Close with Escape
+    act(() => {
+      pressKey('Escape');
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('pressing Escape while editing a note cancels the edit', async () => {
+    render(<App />);
+
+    // Create a note
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Edit me');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'some body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Edit me')).toBeInTheDocument());
+
+    // Open inline editor
+    await userEvent.click(screen.getByRole('button', { name: /edit edit me/i }));
+    expect(screen.getByRole('textbox', { name: /edit title/i })).toBeInTheDocument();
+
+    // Press Escape to cancel edit
+    act(() => {
+      pressKey('Escape');
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', { name: /edit title/i })).not.toBeInTheDocument(),
+    );
+    // The note should still be visible (edit was cancelled, not saved)
+    expect(screen.getByText('Edit me')).toBeInTheDocument();
+  });
+
+  it('pressing Escape when no modal is open blurs the active element', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /search notes/i })).toBeInTheDocument(),
+    );
+
+    // Focus the search input
+    const searchInput = screen.getByRole('textbox', { name: /search notes/i });
+    act(() => {
+      searchInput.focus();
+    });
+    expect(searchInput).toHaveFocus();
+
+    // Press Escape — should blur the search input
+    act(() => {
+      pressKey('Escape', searchInput);
+    });
+
+    await waitFor(() => expect(searchInput).not.toHaveFocus());
   });
 });

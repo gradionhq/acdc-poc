@@ -16,6 +16,7 @@ import {
   listAttachments,
   listNotes,
   NOTE_COLORS,
+  toggleArchive,
   togglePin,
   updateNote,
   uploadAttachments,
@@ -69,6 +70,7 @@ export function App() {
   const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [sort, setSort] = useState<SortOrder>('newest');
   /** noteId → list of attachment metadata (loaded lazily on expand). */
   const [attachments, setAttachments] = useState<Record<string, AttachmentMeta[]>>({});
@@ -104,10 +106,10 @@ export function App() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  async function refresh(p = page, q = query, tf = tagFilter, s = sort) {
+  async function refresh(p = page, q = query, tf = tagFilter, s = sort, archived = showArchived) {
     const seq = ++reqSeqRef.current;
     try {
-      const result = await listNotes(p, PAGE_SIZE, q, tf, s);
+      const result = await listNotes(p, PAGE_SIZE, q, tf, s, archived);
       if (seq !== reqSeqRef.current) return; // stale — a newer request is in flight
       setNotes(result.notes);
       setTotal(result.total);
@@ -122,9 +124,9 @@ export function App() {
   }
 
   useEffect(() => {
-    void refresh(page, query, tagFilter, sort);
+    void refresh(page, query, tagFilter, sort, showArchived);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, query, tagFilter, sort]);
+  }, [page, query, tagFilter, sort, showArchived]);
 
   // Debounce search input: update `query` after SEARCH_DEBOUNCE_MS of inactivity.
   // Reset to page 1 whenever the query changes so results are always from the start.
@@ -321,6 +323,26 @@ export function App() {
     } catch (e: unknown) {
       addToast('Failed to toggle pin', 'error');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
+    }
+  }
+
+  async function onToggleArchive(id: string, currentlyArchived: boolean) {
+    try {
+      await toggleArchive(id);
+      setError(null);
+      addToast(currentlyArchived ? 'Note unarchived' : 'Note archived', 'success');
+      // Note leaves the current view; the current page may become empty.
+      const newTotal = total - 1;
+      const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      const newPage = Math.min(page, newTotalPages);
+      if (newPage === page) {
+        await refresh(page);
+      } else {
+        setPage(newPage);
+      }
+    } catch (e) {
+      addToast('Failed to toggle archive', 'error');
+      setError(String(e));
     }
   }
 
@@ -554,6 +576,16 @@ export function App() {
             <option value="title">Title (A–Z)</option>
           </select>
         </label>
+        <Button
+          variant="secondary"
+          aria-label={showArchived ? 'Show active notes' : 'Show archived notes'}
+          onClick={() => {
+            setPage(1);
+            setShowArchived((v) => !v);
+          }}
+        >
+          {showArchived ? 'Active notes' : 'Archived notes'}
+        </Button>
       </div>
 
       {/* Create-note form */}
@@ -731,20 +763,31 @@ export function App() {
                   </div>
                 )}
                 <div className={styles.noteActions}>
+                  {!n.archived && (
+                    <Button
+                      variant="secondary"
+                      aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
+                      onClick={() => void onTogglePin(n.id, n.pinned)}
+                    >
+                      {n.pinned ? 'Unpin' : 'Pin'}
+                    </Button>
+                  )}
                   <Button
                     variant="secondary"
-                    aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
-                    onClick={() => void onTogglePin(n.id, n.pinned)}
+                    aria-label={n.archived ? `Unarchive ${n.title}` : `Archive ${n.title}`}
+                    onClick={() => void onToggleArchive(n.id, n.archived)}
                   >
-                    {n.pinned ? 'Unpin' : 'Pin'}
+                    {n.archived ? 'Unarchive' : 'Archive'}
                   </Button>
-                  <Button
-                    variant="secondary"
-                    aria-label={`Edit ${n.title}`}
-                    onClick={() => onEditStart(n)}
-                  >
-                    Edit
-                  </Button>
+                  {!n.archived && (
+                    <Button
+                      variant="secondary"
+                      aria-label={`Edit ${n.title}`}
+                      onClick={() => onEditStart(n)}
+                    >
+                      Edit
+                    </Button>
+                  )}
                   <Button
                     variant="danger"
                     aria-label={`Delete ${n.title}`}
@@ -752,20 +795,24 @@ export function App() {
                   >
                     Delete
                   </Button>
-                  <Button
-                    variant="secondary"
-                    aria-label={`Duplicate ${n.title}`}
-                    onClick={() => void onDuplicate(n.id)}
-                  >
-                    Duplicate
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    aria-label={`Attachments for ${n.title}`}
-                    onClick={() => void onToggleAttachments(n.id)}
-                  >
-                    {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
-                  </Button>
+                  {!n.archived && (
+                    <Button
+                      variant="secondary"
+                      aria-label={`Duplicate ${n.title}`}
+                      onClick={() => void onDuplicate(n.id)}
+                    >
+                      Duplicate
+                    </Button>
+                  )}
+                  {!n.archived && (
+                    <Button
+                      variant="secondary"
+                      aria-label={`Attachments for ${n.title}`}
+                      onClick={() => void onToggleAttachments(n.id)}
+                    >
+                      {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
+                    </Button>
+                  )}
                 </div>
                 {attachmentsOpen[n.id] && (
                   <div

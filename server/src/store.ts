@@ -9,6 +9,7 @@ export interface Note {
   tags: string[];
   createdAt: number;
   pinned: boolean;
+  archived: boolean;
   color: NoteColor;
 }
 
@@ -57,6 +58,7 @@ export class NoteStore {
       // not a wall-clock timestamp (keeps pagination deterministic in tests)
       createdAt: this.seq,
       pinned: false,
+      archived: false,
       color: input.color ?? 'none',
     };
     this.notes.set(note.id, note);
@@ -105,6 +107,14 @@ export class NoteStore {
     const existing = this.notes.get(id);
     if (!existing) return undefined;
     const updated: Note = { ...existing, pinned: !existing.pinned };
+    this.notes.set(id, updated);
+    return updated;
+  }
+
+  toggleArchive(id: string): Note | undefined {
+    const existing = this.notes.get(id);
+    if (!existing) return undefined;
+    const updated: Note = { ...existing, archived: !existing.archived };
     this.notes.set(id, updated);
     return updated;
   }
@@ -277,6 +287,7 @@ export class NoteStore {
     query?: string,
     tag?: string,
     sort: SortOrder = 'newest',
+    archived = false,
   ): ListResult {
     const term = query ? query.trim().toLowerCase() : '';
     const tagFilter = tag ? tag.trim().toLowerCase() : '';
@@ -292,6 +303,7 @@ export class NoteStore {
       })
       .filter(
         (n) =>
+          n.archived === archived &&
           (term === '' ||
             n.title.toLowerCase().includes(term) ||
             n.body.toLowerCase().includes(term)) &&

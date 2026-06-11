@@ -502,3 +502,21 @@
   border-radius: var(--radius-base);
   box-shadow: 0 1px 0 var(--color-surface-border);
 }
+
+/* ── Responsive overrides — ≤ 480 px (mobile portrait) ──────── */
+
+@media (max-width: 480px) {
+  .page {
+    padding: 0 var(--space-3);
+  }
+
+  /* Full-width action buttons on narrow screens */
+  .noteActions {
+    flex-direction: column;
+  }
+
+  /* Pagination buttons share available width */
+  .pagination {
+    gap: var(--space-2);
+  }
+}

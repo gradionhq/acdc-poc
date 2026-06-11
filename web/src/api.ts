@@ -7,6 +7,7 @@ export interface Note {
   body: string;
   tags: string[];
   pinned: boolean;
+  archived: boolean;
   color: NoteColor;
 }
 
@@ -24,6 +25,7 @@ function isNote(value: unknown): value is Note {
     Array.isArray(v.tags) &&
     (v.tags as unknown[]).every((t) => typeof t === 'string') &&
     typeof v.pinned === 'boolean' &&
+    typeof v.archived === 'boolean' &&
     isNoteColor(v.color)
   );
 }
@@ -43,6 +45,7 @@ export async function listNotes(
   query?: string,
   tag?: string,
   sort: SortOrder = 'newest',
+  archived = false,
 ): Promise<NotesPage> {
   const params = new URLSearchParams({
     page: String(page),
@@ -54,6 +57,9 @@ export async function listNotes(
   }
   if (tag !== undefined && tag !== '') {
     params.set('tag', tag);
+  }
+  if (archived) {
+    params.set('archived', 'true');
   }
   const res = await fetch(`${base}?${params.toString()}`);
   if (!res.ok) throw new Error('failed to load notes');
@@ -111,6 +117,14 @@ export async function duplicateNote(id: string): Promise<Note> {
 export async function togglePin(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/pin`, { method: 'PATCH' });
   if (!res.ok) throw new Error('failed to toggle pin');
+  const updated: unknown = await res.json();
+  if (!isNote(updated)) throw new Error('invalid note payload');
+  return updated;
+}
+
+export async function toggleArchive(id: string): Promise<Note> {
+  const res = await fetch(`${base}/${id}/archive`, { method: 'PATCH' });
+  if (!res.ok) throw new Error('failed to toggle archive');
   const updated: unknown = await res.json();
   if (!isNote(updated)) throw new Error('invalid note payload');
   return updated;

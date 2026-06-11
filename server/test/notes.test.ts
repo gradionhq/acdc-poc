@@ -457,6 +457,106 @@ describe('notes API', () => {
   });
 });
 
+describe('PATCH /api/notes/:id/archive', () => {
+  it('creates a note with archived=false by default', async () => {
+    const app = createApp();
+    const res = await request(app).post('/api/notes').send({ title: 't', body: 'b' }).expect(201);
+    expect(res.body.archived).toBe(false);
+  });
+
+  it('toggles archived true then false', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 't', body: 'b' })
+      .expect(201);
+
+    const archived = await request(app).patch(`/api/notes/${created.body.id}/archive`).expect(200);
+    expect(archived.body.archived).toBe(true);
+
+    const unarchived = await request(app)
+      .patch(`/api/notes/${created.body.id}/archive`)
+      .expect(200);
+    expect(unarchived.body.archived).toBe(false);
+  });
+
+  it('returns 404 for unknown id', async () => {
+    const app = createApp();
+    const res = await request(app).patch('/api/notes/nope/archive').expect(404);
+    expect(res.body).toEqual({ error: 'not found' });
+  });
+
+  it('archived note disappears from default GET /api/notes', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'archive me', body: 'b' })
+      .expect(201);
+
+    await request(app).patch(`/api/notes/${created.body.id}/archive`).expect(200);
+
+    const list = await request(app).get('/api/notes').expect(200);
+    const titles = (list.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles).not.toContain('archive me');
+    expect(list.headers['x-total-count']).toBe('0');
+  });
+
+  it('archived note appears in GET /api/notes?archived=true', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'archived note', body: 'b' })
+      .expect(201);
+
+    await request(app).patch(`/api/notes/${created.body.id}/archive`).expect(200);
+
+    const list = await request(app).get('/api/notes?archived=true').expect(200);
+    const titles = (list.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles).toContain('archived note');
+    expect(list.headers['x-total-count']).toBe('1');
+  });
+
+  it('rejects invalid archived param', async () => {
+    const app = createApp();
+    const res = await request(app).get('/api/notes?archived=maybe').expect(400);
+    expect(res.body).toEqual({ error: 'archived must be "true" or "false"' });
+  });
+
+  it('archived notes excluded from search results in default view', async () => {
+    const app = createApp();
+    await request(app).post('/api/notes').send({ title: 'findable active', body: 'b' }).expect(201);
+    const archived = await request(app)
+      .post('/api/notes')
+      .send({ title: 'findable archived', body: 'b' })
+      .expect(201);
+
+    await request(app).patch(`/api/notes/${archived.body.id}/archive`).expect(200);
+
+    const res = await request(app).get('/api/notes?q=findable').expect(200);
+    expect(res.headers['x-total-count']).toBe('1');
+    expect((res.body as Array<{ title: string }>)[0].title).toBe('findable active');
+  });
+
+  it('pagination still correct with archived notes excluded', async () => {
+    const app = createApp();
+    for (let i = 0; i < 3; i++) {
+      await request(app)
+        .post('/api/notes')
+        .send({ title: `note ${i}`, body: 'b' })
+        .expect(201);
+    }
+    const archived = await request(app)
+      .post('/api/notes')
+      .send({ title: 'archived', body: 'b' })
+      .expect(201);
+    await request(app).patch(`/api/notes/${archived.body.id}/archive`).expect(200);
+
+    const res = await request(app).get('/api/notes?page=1&pageSize=2').expect(200);
+    expect(res.headers['x-total-count']).toBe('3');
+    expect(res.body).toHaveLength(2);
+  });
+});
+
 describe('POST /api/notes/:id/duplicate', () => {
   it('returns 404 for an unknown source note id', async () => {
     const app = createApp();
@@ -523,6 +623,46 @@ describe('POST /api/notes/:id/duplicate', () => {
 
     const atts = await request(app).get(`/api/notes/${dup.body.id}/attachments`).expect(200);
     expect(atts.body).toHaveLength(0);
+  });
+});
+
+describe('POST /api/test/reset — guarded reset endpoint', () => {
+  let savedEnv: string | undefined;
+
+  afterEach(() => {
+    // Restore the env variable to what it was before each test
+    if (savedEnv === undefined) {
+      delete process.env.ENABLE_TEST_RESET;
+    } else {
+      process.env.ENABLE_TEST_RESET = savedEnv;
+    }
+  });
+
+  it('returns 204 and clears notes when ENABLE_TEST_RESET=1', async () => {
+    savedEnv = process.env.ENABLE_TEST_RESET;
+    process.env.ENABLE_TEST_RESET = '1';
+
+    const store = new NoteStore();
+    const app = createApp(store);
+
+    // Seed a note
+    await request(app).post('/api/notes').send({ title: 't', body: 'b' }).expect(201);
+
+    // Reset
+    await request(app).post('/api/test/reset').expect(204);
+
+    // List should be empty
+    const res = await request(app).get('/api/notes').expect(200);
+    expect(res.body).toHaveLength(0);
+    expect(res.headers['x-total-count']).toBe('0');
+  });
+
+  it('returns 404 when ENABLE_TEST_RESET is not set', async () => {
+    savedEnv = process.env.ENABLE_TEST_RESET;
+    delete process.env.ENABLE_TEST_RESET;
+
+    const app = createApp();
+    await request(app).post('/api/test/reset').expect(404);
   });
 });
 
