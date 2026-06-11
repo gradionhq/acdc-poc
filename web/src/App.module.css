@@ -108,6 +108,12 @@
   resize: vertical;
 }
 
+.wordCount {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
 .formActions {
   margin-top: var(--space-4);
 }

@@ -803,6 +803,46 @@ describe('attachment mock — 404 contract', () => {
   });
 });
 
+describe('App — word/character count', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('shows "0 words, 0 characters" initially when body is empty', async () => {
+    render(<App />);
+    expect(screen.getByText('0 words, 0 characters')).toBeInTheDocument();
+  });
+
+  it('updates word and character count as user types in the body field', async () => {
+    render(<App />);
+    const bodyInput = screen.getByLabelText(/^body$/i);
+    await userEvent.type(bodyInput, 'hello world');
+    expect(screen.getByText('2 words, 11 characters')).toBeInTheDocument();
+  });
+
+  it('uses singular "word" when count is 1', async () => {
+    render(<App />);
+    const bodyInput = screen.getByLabelText(/^body$/i);
+    await userEvent.type(bodyInput, 'hello');
+    expect(screen.getByText('1 word, 5 characters')).toBeInTheDocument();
+  });
+
+  it('uses singular "character" when count is 1', async () => {
+    render(<App />);
+    const bodyInput = screen.getByLabelText(/^body$/i);
+    await userEvent.type(bodyInput, 'a');
+    expect(screen.getByText('1 word, 1 character')).toBeInTheDocument();
+  });
+
+  it('resets count to 0 after note is submitted', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'My note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'hello world');
+    expect(screen.getByText('2 words, 11 characters')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('My note')).toBeInTheDocument());
+    expect(screen.getByText('0 words, 0 characters')).toBeInTheDocument();
+  });
+});
+
 describe('listNotes — X-Total-Count validation', () => {
   it('returns total=0 when X-Total-Count header is missing', async () => {
     vi.stubGlobal(

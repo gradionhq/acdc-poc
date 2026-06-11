@@ -17,6 +17,7 @@ import { Button } from './components/Button';
 import { NoteBody } from './NoteBody';
 import { ToastContainer } from './ToastContainer';
 import { useTheme } from './useTheme';
+import { countWords, countChars } from './wordCount';
 import { useToast } from './useToast';
 import styles from './App.module.css';
 
@@ -338,6 +339,10 @@ export function App() {
               onChange={(e) => setBody(e.target.value)}
             />
           </label>
+          <p aria-live="polite" className={styles.wordCount}>
+            {countWords(body)} {countWords(body) === 1 ? 'word' : 'words'}, {countChars(body)}{' '}
+            {countChars(body) === 1 ? 'character' : 'characters'}
+          </p>
           <label className={styles.fieldLabel}>
             Tags
             <input
