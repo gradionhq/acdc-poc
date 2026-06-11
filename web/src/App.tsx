@@ -8,14 +8,12 @@ import {
   type FormEvent,
 } from 'react';
 import {
-  attachmentDownloadUrl,
   createNote,
   deleteAttachment,
   deleteNote,
   duplicateNote,
   listAttachments,
   listNotes,
-  NOTE_COLORS,
   toggleArchive,
   togglePin,
   updateNote,
@@ -25,15 +23,17 @@ import {
   type NoteColor,
   type SortOrder,
 } from './api';
-import { Button } from './components/Button';
 import { ConfirmDialog } from './ConfirmDialog';
-import { NoteBody } from './NoteBody';
-import { TagManager } from './TagManager';
 import { ToastContainer } from './ToastContainer';
 import { useTheme } from './useTheme';
-import { countWords, countChars } from './wordCount';
 import { useToast } from './useToast';
-import { useKeyboardShortcuts, SHORTCUTS } from './useKeyboardShortcuts';
+import { useKeyboardShortcuts } from './useKeyboardShortcuts';
+import { FilterBar } from './components/FilterBar';
+import { Header } from './components/Header';
+import { NoteComposer } from './components/NoteComposer';
+import { NoteList } from './components/NoteList';
+import { Pagination } from './components/Pagination';
+import { Button } from './components/Button';
 import styles from './App.module.css';
 
 const PAGE_SIZE = 5;
@@ -494,64 +494,19 @@ export function App() {
 
   return (
     <main className={styles.page}>
-      <header className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Notes</h1>
-        <div className={styles.headerActions}>
-          <button
-            ref={helpToggleRef}
-            aria-label="Show keyboard shortcuts"
-            aria-pressed={showHelp}
-            className={styles.iconButton}
-            onClick={() => setShowHelp((prev) => !prev)}
-          >
-            ?
-          </button>
-          <Button
-            variant="secondary"
-            onClick={() => setShowTagManager((v) => !v)}
-            aria-expanded={showTagManager}
-            aria-controls="tag-manager-panel"
-          >
-            {showTagManager ? 'Hide tag manager' : 'Manage tags'}
-          </Button>
-          <button
-            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            className="theme-toggle"
-            onClick={toggleTheme}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'}
-          </button>
-        </div>
-      </header>
+      <Header
+        theme={theme}
+        toggleTheme={toggleTheme}
+        showHelp={showHelp}
+        onToggleHelp={() => setShowHelp((prev) => !prev)}
+        onCloseHelp={() => setShowHelp(false)}
+        showTagManager={showTagManager}
+        onToggleTagManager={() => setShowTagManager((v) => !v)}
+        onTagsChanged={() => void refresh(page, query, tagFilter)}
+        helpToggleRef={helpToggleRef}
+        helpCloseBtnRef={helpCloseBtnRef}
+      />
 
-      {showHelp && (
-        <div
-          role="dialog"
-          aria-label="Keyboard shortcuts"
-          aria-modal="true"
-          className={styles.helpPanel}
-        >
-          <div className={styles.helpPanelHeader}>
-            <h2 className={styles.helpPanelTitle}>Keyboard shortcuts</h2>
-            <button
-              ref={helpCloseBtnRef}
-              aria-label="Close keyboard shortcuts"
-              className={styles.iconButton}
-              onClick={() => setShowHelp(false)}
-            >
-              ✕
-            </button>
-          </div>
-          <ul className={styles.shortcutList}>
-            {SHORTCUTS.map(({ key, description }) => (
-              <li key={key} className={styles.shortcutItem}>
-                <kbd className={styles.kbd}>{key}</kbd>
-                <span>{description}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
       {error && (
         <div role="alert" className={styles.errorBanner}>
           <span className={styles.errorMessage}>{error}</span>
@@ -561,401 +516,81 @@ export function App() {
         </div>
       )}
 
-      {/* Tag manager panel */}
-      {showTagManager && (
-        <div id="tag-manager-panel">
-          <TagManager onChanged={() => void refresh(page, query, tagFilter)} />
-        </div>
-      )}
+      <FilterBar
+        searchInput={searchInput}
+        onSearchChange={setSearchInput}
+        tagFilter={tagFilter}
+        onTagFilterChange={(value) => {
+          setPage(1);
+          setTagFilter(value);
+        }}
+        sort={sort}
+        onSortChange={(s) => {
+          setPage(1);
+          setSort(s);
+        }}
+        showArchived={showArchived}
+        onToggleArchived={() => {
+          setPage(1);
+          setShowArchived((v) => !v);
+        }}
+        searchInputRef={searchInputRef}
+      />
 
-      {/* Search / filter bar */}
-      <div className={styles.filterBar}>
-        <label className={styles.fieldLabel}>
-          Search
-          <input
-            ref={searchInputRef}
-            className={styles.input}
-            aria-label="Search notes"
-            placeholder="Search notes…"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-        </label>
-        <label className={styles.fieldLabel}>
-          Filter by tag
-          <input
-            className={styles.input}
-            aria-label="Filter by tag"
-            placeholder="Filter by tag…"
-            value={tagFilter}
-            onChange={(e) => {
-              setPage(1);
-              setTagFilter(e.target.value);
-            }}
-          />
-        </label>
-        <label className={styles.fieldLabel}>
-          Sort by
-          <select
-            className={styles.input}
-            aria-label="Sort notes"
-            value={sort}
-            onChange={(e) => {
-              setPage(1);
-              setSort(e.target.value as SortOrder);
-            }}
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="title">Title (A–Z)</option>
-          </select>
-        </label>
-        <Button
-          variant="secondary"
-          aria-label={showArchived ? 'Show active notes' : 'Show archived notes'}
-          onClick={() => {
-            setPage(1);
-            setShowArchived((v) => !v);
-          }}
-        >
-          {showArchived ? 'Active notes' : 'Archived notes'}
-        </Button>
-      </div>
+      <NoteComposer
+        title={title}
+        onTitleChange={setTitle}
+        body={body}
+        onBodyChange={setBody}
+        tagsInput={tagsInput}
+        onTagsInputChange={setTagsInput}
+        color={color}
+        onColorChange={setColor}
+        onSubmit={onSubmit}
+        newNoteTitleRef={newNoteTitleRef}
+      />
 
-      {/* Create-note form */}
-      <form onSubmit={onSubmit} className={styles.form}>
-        <div className={`${styles.card} ${styles.fieldGroup}`}>
-          <h2 className={styles.formTitle}>New note</h2>
-          <label className={styles.fieldLabel}>
-            Title
-            <input
-              ref={newNoteTitleRef}
-              className={styles.input}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </label>
-          <label className={styles.fieldLabel}>
-            Body
-            <textarea
-              className={styles.textarea}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-            />
-          </label>
-          <p aria-live="polite" className={styles.wordCount}>
-            {countWords(body)} {countWords(body) === 1 ? 'word' : 'words'}, {countChars(body)}{' '}
-            {countChars(body) === 1 ? 'character' : 'characters'}
-          </p>
-          <label className={styles.fieldLabel}>
-            Tags
-            <input
-              className={styles.input}
-              aria-label="Tags"
-              placeholder="comma-separated tags"
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-            />
-          </label>
-          <fieldset className={styles.fieldLabel}>
-            <legend>Color</legend>
-            <div className={styles.colorPicker}>
-              {NOTE_COLORS.map((c) => {
-                const swatchKey = `swatch-${c}` as keyof typeof styles;
-                const swatchCls = [
-                  styles.colorSwatch,
-                  styles[swatchKey],
-                  color === c ? styles.colorSwatchSelected : '',
-                ].join(' ');
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    aria-label={`Color ${c}`}
-                    aria-pressed={color === c}
-                    className={swatchCls}
-                    onClick={() => setColor(c)}
-                  />
-                );
-              })}
-            </div>
-          </fieldset>
-          <div className={styles.formActions}>
-            <Button type="submit" variant="primary">
-              Add note
-            </Button>
-          </div>
-        </div>
-      </form>
+      <NoteList
+        notes={notes}
+        initialLoading={initialLoading}
+        isFilterActive={isFilterActive}
+        showEmptyState={showEmptyState}
+        editingId={editingId}
+        editTitle={editTitle}
+        editBody={editBody}
+        editTagsInput={editTagsInput}
+        editColor={editColor}
+        onEditTitleChange={setEditTitle}
+        onEditBodyChange={setEditBody}
+        onEditTagsInputChange={setEditTagsInput}
+        onEditColorChange={setEditColor}
+        onEditSave={(id) => void onEditSave(id)}
+        onEditCancel={onEditCancel}
+        onEditStart={onEditStart}
+        onTogglePin={(id, pinned) => void onTogglePin(id, pinned)}
+        onToggleArchive={(id, archived) => void onToggleArchive(id, archived)}
+        onDeleteRequest={onDeleteRequest}
+        onDuplicate={(id) => void onDuplicate(id)}
+        attachments={attachments}
+        attachmentsOpen={attachmentsOpen}
+        uploadError={uploadError}
+        dragOver={dragOver}
+        onToggleAttachments={(id) => void onToggleAttachments(id)}
+        onUploadFile={onUploadFile}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onDeleteAttachment={onDeleteAttachment}
+        newNoteTitleRef={newNoteTitleRef}
+      />
 
-      {/* Loading skeleton — only on initial load, not background refresh */}
-      {initialLoading && (
-        <ul aria-label="Loading notes" aria-busy="true" className={styles.noteList}>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <li key={i} className={`${styles.noteCard} ${styles.skeletonCard}`} aria-hidden="true">
-              <span className={`${styles.skeletonLine} ${styles.skeletonTitle}`} />
-              <span className={`${styles.skeletonLine} ${styles.skeletonBody}`} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPrev={() => setPage((p) => p - 1)}
+        onNext={() => setPage((p) => p + 1)}
+      />
 
-      {/* Empty state */}
-      {showEmptyState && (
-        <div className={styles.emptyState} role="status">
-          {isFilterActive ? (
-            <p>No notes match your search.</p>
-          ) : (
-            <>
-              <p>No notes yet. Create your first note above!</p>
-              <Button
-                variant="primary"
-                onClick={() => newNoteTitleRef.current?.focus()}
-                aria-label="Add your first note"
-              >
-                Add your first note
-              </Button>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Note list — always rendered after initial load to avoid flash on mutations */}
-      {!initialLoading && (
-        <ul className={styles.noteList} aria-label="Notes list">
-          {notes.map((n) =>
-            editingId === n.id ? (
-              <li key={n.id} className={styles.noteCard}>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>
-                    Edit title
-                    <input
-                      className={styles.input}
-                      aria-label="Edit title"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                    />
-                  </label>
-                  <label className={styles.fieldLabel}>
-                    Edit body
-                    <textarea
-                      className={styles.textarea}
-                      aria-label="Edit body"
-                      value={editBody}
-                      onChange={(e) => setEditBody(e.target.value)}
-                    />
-                  </label>
-                  <label className={styles.fieldLabel}>
-                    Edit tags
-                    <input
-                      className={styles.input}
-                      aria-label="Edit tags"
-                      placeholder="comma-separated tags"
-                      value={editTagsInput}
-                      onChange={(e) => setEditTagsInput(e.target.value)}
-                    />
-                  </label>
-                  <fieldset className={styles.fieldLabel}>
-                    <legend>Edit color</legend>
-                    <div className={styles.colorPicker}>
-                      {NOTE_COLORS.map((c) => {
-                        const swatchKey = `swatch-${c}` as keyof typeof styles;
-                        const editSwatchCls = [
-                          styles.colorSwatch,
-                          styles[swatchKey],
-                          editColor === c ? styles.colorSwatchSelected : '',
-                        ].join(' ');
-                        return (
-                          <button
-                            key={c}
-                            type="button"
-                            aria-label={`Color ${c}`}
-                            aria-pressed={editColor === c}
-                            className={editSwatchCls}
-                            onClick={() => setEditColor(c)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </fieldset>
-                  <div className={styles.noteActions}>
-                    <Button variant="primary" onClick={() => void onEditSave(n.id)}>
-                      Save
-                    </Button>
-                    <Button variant="secondary" onClick={onEditCancel}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              </li>
-            ) : (
-              <li
-                key={n.id}
-                className={[
-                  styles.noteCard,
-                  n.color === 'none' ? '' : styles[`card-${n.color}` as keyof typeof styles],
-                ].join(' ')}
-                data-color={n.color}
-              >
-                <div className={styles.noteHeader}>
-                  <span className={styles.noteTitle}>{n.title}</span>
-                  {n.pinned && (
-                    <span aria-label="Pinned" className={styles.pinnedBadge}>
-                      📌
-                    </span>
-                  )}
-                </div>
-                <NoteBody body={n.body} className={styles.noteBody} />
-                {n.tags.length > 0 && (
-                  <div className={styles.tagList} aria-label="Tags">
-                    {n.tags.map((tag) => (
-                      <span key={tag} data-tag={tag} className={styles.tag}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div className={styles.noteActions}>
-                  {!n.archived && (
-                    <Button
-                      variant="secondary"
-                      aria-label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
-                      onClick={() => void onTogglePin(n.id, n.pinned)}
-                    >
-                      {n.pinned ? 'Unpin' : 'Pin'}
-                    </Button>
-                  )}
-                  <Button
-                    variant="secondary"
-                    aria-label={n.archived ? `Unarchive ${n.title}` : `Archive ${n.title}`}
-                    onClick={() => void onToggleArchive(n.id, n.archived)}
-                  >
-                    {n.archived ? 'Unarchive' : 'Archive'}
-                  </Button>
-                  {!n.archived && (
-                    <Button
-                      variant="secondary"
-                      aria-label={`Edit ${n.title}`}
-                      onClick={() => onEditStart(n)}
-                    >
-                      Edit
-                    </Button>
-                  )}
-                  <Button
-                    variant="danger"
-                    aria-label={`Delete ${n.title}`}
-                    onClick={(e) => onDeleteRequest(n.id, e.currentTarget)}
-                  >
-                    Delete
-                  </Button>
-                  {!n.archived && (
-                    <Button
-                      variant="secondary"
-                      aria-label={`Duplicate ${n.title}`}
-                      onClick={() => void onDuplicate(n.id)}
-                    >
-                      Duplicate
-                    </Button>
-                  )}
-                  {!n.archived && (
-                    <Button
-                      variant="secondary"
-                      aria-label={`Attachments for ${n.title}`}
-                      onClick={() => void onToggleAttachments(n.id)}
-                    >
-                      {attachmentsOpen[n.id] ? 'Hide attachments' : 'Attachments'}
-                    </Button>
-                  )}
-                </div>
-                {attachmentsOpen[n.id] && (
-                  <div
-                    className={styles.attachmentsPanel}
-                    aria-label={`Attachments panel for ${n.title}`}
-                  >
-                    {uploadError[n.id] && (
-                      <p role="alert" className={styles.alert}>
-                        {uploadError[n.id]}
-                      </p>
-                    )}
-                    {/* Drag-and-drop dropzone */}
-                    <section
-                      aria-label={`Drop files here to attach to ${n.title}`}
-                      className={`${styles.dropzone} ${dragOver[n.id] ? styles.dropzoneActive : ''}`}
-                      onDragOver={(e) => onDragOver(n.id, e)}
-                      onDragLeave={(e) => onDragLeave(n.id, e)}
-                      onDrop={(e) => void onDrop(n.id, e)}
-                    >
-                      <span className={styles.dropzoneHint}>
-                        Drag &amp; drop files here, or use the button below
-                      </span>
-                    </section>
-                    <label className={styles.attachmentUpload}>
-                      Attach files
-                      <input
-                        type="file"
-                        multiple
-                        aria-label={`Upload attachment for ${n.title}`}
-                        onChange={(e) => void onUploadFile(n.id, e)}
-                      />
-                    </label>
-                    {(attachments[n.id] ?? []).length === 0 ? (
-                      <p className={styles.attachmentEmpty}>No attachments yet.</p>
-                    ) : (
-                      <ul
-                        className={styles.attachmentList}
-                        aria-label={`Attachment list for ${n.title}`}
-                      >
-                        {(attachments[n.id] ?? []).map((att) => (
-                          <li key={att.filename}>
-                            <a
-                              href={attachmentDownloadUrl(n.id, att.filename)}
-                              download={att.filename}
-                              aria-label={`Download ${att.filename}`}
-                            >
-                              {att.filename}
-                            </a>{' '}
-                            ({att.size} bytes)
-                            <Button
-                              variant="danger"
-                              aria-label={`Delete attachment ${att.filename}`}
-                              onClick={() => void onDeleteAttachment(n.id, att.filename)}
-                            >
-                              Delete
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )}
-              </li>
-            ),
-          )}
-        </ul>
-      )}
-
-      {/* Pagination */}
-      <nav aria-label="Pagination" className={styles.pagination}>
-        <Button
-          variant="secondary"
-          onClick={() => setPage((p) => p - 1)}
-          disabled={page <= 1}
-          aria-label="Previous page"
-        >
-          Previous
-        </Button>
-        <span className={styles.pageInfo}>
-          Page {page} of {totalPages}
-        </span>
-        <Button
-          variant="secondary"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={page >= totalPages}
-          aria-label="Next page"
-        >
-          Next
-        </Button>
-      </nav>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       {pendingDeleteId !== null && (
         <ConfirmDialog
