@@ -86,6 +86,14 @@ export async function deleteNote(id: string): Promise<void> {
   if (!res.ok && res.status !== 404) throw new Error('failed to delete note');
 }
 
+export async function duplicateNote(id: string): Promise<Note> {
+  const res = await fetch(`${base}/${id}/duplicate`, { method: 'POST' });
+  if (!res.ok) throw new Error('failed to duplicate note');
+  const created: unknown = await res.json();
+  if (!isNote(created)) throw new Error('invalid note payload');
+  return created;
+}
+
 export async function togglePin(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/pin`, { method: 'PATCH' });
   if (!res.ok) throw new Error('failed to toggle pin');

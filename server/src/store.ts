@@ -71,6 +71,22 @@ export class NoteStore {
     return updated;
   }
 
+  /**
+   * Duplicate an existing note: copies title (prefixed "Copy of …"), body, and
+   * tags into a brand-new note.  The duplicate gets its own id and createdAt
+   * timestamp, is not pinned, and does not inherit any attachments.
+   * Returns undefined when the source note does not exist.
+   */
+  duplicate(id: string): Note | undefined {
+    const source = this.notes.get(id);
+    if (!source) return undefined;
+    return this.create({
+      title: `Copy of ${source.title}`,
+      body: source.body,
+      tags: [...source.tags],
+    });
+  }
+
   togglePin(id: string): Note | undefined {
     const existing = this.notes.get(id);
     if (!existing) return undefined;

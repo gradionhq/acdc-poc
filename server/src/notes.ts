@@ -157,6 +157,15 @@ export function createNotesRouter(store: NoteStore): Router {
     res.status(204).end();
   });
 
+  router.post('/:id/duplicate', (req: Request, res: Response) => {
+    const copy = store.duplicate(req.params.id);
+    if (!copy) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    res.status(201).json(copy);
+  });
+
   router.patch('/:id/pin', (req: Request, res: Response) => {
     const note = store.togglePin(req.params.id);
     if (!note) {

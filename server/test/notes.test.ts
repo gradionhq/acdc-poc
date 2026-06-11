@@ -313,6 +313,75 @@ describe('notes API', () => {
   });
 });
 
+describe('POST /api/notes/:id/duplicate', () => {
+  it('returns 404 for an unknown source note id', async () => {
+    const app = createApp();
+    const res = await request(app).post('/api/notes/nope/duplicate').expect(404);
+    expect(res.body).toEqual({ error: 'not found' });
+  });
+
+  it('creates a new note with a distinct id, prefixed title, same body and tags', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'Original', body: 'some body', tags: ['tag1', 'tag2'] })
+      .expect(201);
+
+    const res = await request(app).post(`/api/notes/${created.body.id}/duplicate`).expect(201);
+
+    expect(res.body.id).toBeDefined();
+    expect(res.body.id).not.toBe(created.body.id);
+    expect(res.body.title).toBe('Copy of Original');
+    expect(res.body.body).toBe('some body');
+    expect(res.body.tags).toEqual(['tag1', 'tag2']);
+  });
+
+  it('duplicate is not pinned even when source is pinned', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'Pinned note', body: 'b' })
+      .expect(201);
+    await request(app).patch(`/api/notes/${created.body.id}/pin`).expect(200);
+
+    const res = await request(app).post(`/api/notes/${created.body.id}/duplicate`).expect(201);
+    expect(res.body.pinned).toBe(false);
+  });
+
+  it('duplicate appears in the notes list', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'List note', body: 'b' })
+      .expect(201);
+
+    await request(app).post(`/api/notes/${created.body.id}/duplicate`).expect(201);
+
+    const list = await request(app).get('/api/notes').expect(200);
+    const titles = (list.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles).toContain('List note');
+    expect(titles).toContain('Copy of List note');
+  });
+
+  it('attachments are NOT copied to the duplicate', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'With attach', body: 'b' })
+      .expect(201);
+    // Add an attachment to the original
+    await request(app)
+      .post(`/api/notes/${created.body.id}/attachments`)
+      .attach('file', Buffer.from('hello'), { filename: 'hello.txt', contentType: 'text/plain' })
+      .expect(201);
+
+    const dup = await request(app).post(`/api/notes/${created.body.id}/duplicate`).expect(201);
+
+    const atts = await request(app).get(`/api/notes/${dup.body.id}/attachments`).expect(200);
+    expect(atts.body).toHaveLength(0);
+  });
+});
+
 describe('POST /api/test/reset — guarded reset endpoint', () => {
   let savedEnv: string | undefined;
 

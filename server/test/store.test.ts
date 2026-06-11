@@ -169,6 +169,67 @@ describe('NoteStore', () => {
   });
 });
 
+describe('NoteStore — duplicate()', () => {
+  it('returns undefined when the source note does not exist', () => {
+    const store = new NoteStore();
+    expect(store.duplicate('nope')).toBeUndefined();
+  });
+
+  it('creates a new note with a distinct id', () => {
+    const store = new NoteStore();
+    const original = store.create({ title: 'Hello', body: 'World', tags: ['a', 'b'] });
+    const copy = store.duplicate(original.id);
+    expect(copy).toBeDefined();
+    expect(copy!.id).not.toBe(original.id);
+  });
+
+  it('copies title prefixed with "Copy of …", body, and tags', () => {
+    const store = new NoteStore();
+    const original = store.create({ title: 'Hello', body: 'World', tags: ['a', 'b'] });
+    const copy = store.duplicate(original.id);
+    expect(copy!.title).toBe('Copy of Hello');
+    expect(copy!.body).toBe(original.body);
+    expect(copy!.tags).toEqual(original.tags);
+  });
+
+  it('duplicate is not pinned regardless of source', () => {
+    const store = new NoteStore();
+    const original = store.create({ title: 't', body: 'b' });
+    store.togglePin(original.id);
+    const copy = store.duplicate(original.id);
+    expect(copy!.pinned).toBe(false);
+  });
+
+  it('duplicate has a newer createdAt than source so it sorts after unpinned notes', () => {
+    const store = new NoteStore();
+    const original = store.create({ title: 't', body: 'b' });
+    const copy = store.duplicate(original.id);
+    expect(copy!.createdAt).toBeGreaterThan(original.createdAt);
+  });
+
+  it('editing the original does not affect the duplicate', () => {
+    const store = new NoteStore();
+    const original = store.create({ title: 't', body: 'b', tags: ['x'] });
+    const copy = store.duplicate(original.id)!;
+    store.update(original.id, { title: 'changed', body: 'changed body', tags: ['y'] });
+    const copyAfter = store.get(copy.id)!;
+    expect(copyAfter.title).toBe('Copy of t');
+    expect(copyAfter.body).toBe('b');
+    expect(copyAfter.tags).toEqual(['x']);
+  });
+
+  it('duplicate appears at the top of the list (newest createdAt among unpinned)', () => {
+    const store = new NoteStore();
+    store.create({ title: 'first', body: 'b' });
+    const second = store.create({ title: 'second', body: 'b' });
+    store.duplicate(second.id);
+    const result = store.list(1, 10);
+    // Unpinned notes are sorted by createdAt ascending; duplicate has the highest value
+    const unpinned = result.items.filter((n) => !n.pinned);
+    expect(unpinned[unpinned.length - 1].title).toBe('Copy of second');
+  });
+});
+
 describe('NoteStore — reset()', () => {
   it('empties notes and attachments and resets the id sequence', () => {
     const store = new NoteStore();

@@ -3,6 +3,7 @@ import {
   attachmentDownloadUrl,
   createNote,
   deleteNote,
+  duplicateNote,
   listAttachments,
   listNotes,
   togglePin,
@@ -241,6 +242,24 @@ export function App() {
     }
   }
 
+  async function onDuplicate(id: string) {
+    try {
+      await duplicateNote(id);
+      setError(null);
+      // The duplicate is appended at the end (newest createdAt); navigate to the
+      // last page so it is immediately visible.
+      const newTotal = total + 1;
+      const lastPage = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
+      if (page === lastPage) {
+        await refresh(lastPage);
+      } else {
+        setPage(lastPage);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.pageHeader}>
@@ -409,6 +428,13 @@ export function App() {
                   onClick={() => void onDelete(n.id)}
                 >
                   Delete
+                </Button>
+                <Button
+                  variant="secondary"
+                  aria-label={`Duplicate ${n.title}`}
+                  onClick={() => void onDuplicate(n.id)}
+                >
+                  Duplicate
                 </Button>
                 <Button
                   variant="secondary"

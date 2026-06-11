@@ -78,6 +78,25 @@ function mockFetchSequence() {
         notes[idx] = { ...notes[idx], pinned: !notes[idx].pinned };
         return new Response(JSON.stringify(notes[idx]), { status: 200 });
       }
+
+      // POST /api/notes/:id/duplicate
+      if (init?.method === 'POST' && /\/api\/notes\/[^/]+\/duplicate$/.test(urlStr)) {
+        const noteId = urlStr.split('/').at(-2) ?? '';
+        const source = notes.find((n) => n.id === noteId);
+        if (!source) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        const copy: MockNote = {
+          id: String(++seq),
+          title: `Copy of ${source.title}`,
+          body: source.body,
+          tags: [...source.tags],
+          pinned: false,
+        };
+        notes.push(copy);
+        return new Response(JSON.stringify(copy), { status: 201 });
+      }
+
       if (init?.method === 'POST') {
         const b = JSON.parse(String(init.body)) as {
           title: string;
@@ -829,5 +848,52 @@ describe('App — dark mode toggle', () => {
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     expect(localStorage.getItem('theme')).toBe('light');
+  });
+});
+
+describe('App — duplicate', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('shows a Duplicate button for each note', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Dup me');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Dup me')).toBeInTheDocument());
+
+    expect(screen.getByRole('button', { name: /duplicate dup me/i })).toBeInTheDocument();
+  });
+
+  it('clicking Duplicate creates a copy with prefixed title in the list', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Original note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'the body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Original note')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /duplicate original note/i }));
+    await waitFor(() => expect(screen.getByText('Copy of Original note')).toBeInTheDocument());
+  });
+
+  it('the copy and the original are independent — editing one does not affect the other', async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Source');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Source')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /duplicate source/i }));
+    await waitFor(() => expect(screen.getByText('Copy of Source')).toBeInTheDocument());
+
+    // Edit the original
+    await userEvent.click(screen.getByRole('button', { name: /^edit source$/i }));
+    const editTitle = screen.getByRole('textbox', { name: /edit title/i });
+    await userEvent.clear(editTitle);
+    await userEvent.type(editTitle, 'Source EDITED');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => expect(screen.getByText('Source EDITED')).toBeInTheDocument());
+    // The copy should still have its original title
+    expect(screen.getByText('Copy of Source')).toBeInTheDocument();
   });
 });
