@@ -13,8 +13,21 @@ async function createNote(
   await expect(titleInput).toHaveValue('');
 }
 
+// Wait for the active notes list to finish its async fetch. The skeleton is
+// only shown on the very first load; background refetches (e.g. after an
+// archive/unarchive action or a view switch) replace the list contents
+// silently. We wait for the non-busy `ul[aria-label="Notes list"]` to be
+// present so `findNoteItem` doesn't race the refetch.
+async function waitForNotesListReady(page: import('@playwright/test').Page): Promise<void> {
+  // The non-busy list (aria-busy is absent or false on the real list).
+  await page
+    .getByRole('list', { name: 'Notes list' })
+    .waitFor({ state: 'visible', timeout: 10000 });
+}
+
 // Navigate through pages until an item matching `title` is visible, then return
-// the locator. Starts from page 1.
+// the locator. Starts from page 1. Waits for the list to be ready on each
+// page so we don't race an in-flight async refetch.
 async function findNoteItem(
   page: import('@playwright/test').Page,
   title: string,
@@ -25,11 +38,20 @@ async function findNoteItem(
   // Go to page 1 first
   while (await prevBtn.isEnabled()) {
     await prevBtn.click();
+    await waitForNotesListReady(page);
   }
 
   for (;;) {
+    // Wait for the list to settle on this page before inspecting items.
+    await waitForNotesListReady(page);
     const item = page.getByRole('listitem').filter({ hasText: title });
-    if (await item.isVisible()) return item;
+    // Use waitFor instead of isVisible so we give the freshly-rendered page
+    // a chance to display the note before concluding it is absent.
+    const found = await item
+      .waitFor({ state: 'visible', timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    if (found) return item;
     if (!(await nextBtn.isEnabled())) break;
     await nextBtn.click();
   }
@@ -60,8 +82,9 @@ test('archive a note: it disappears from the main list and appears in the archiv
     timeout: 5000,
   });
 
-  // Switch to archived view
+  // Switch to archived view and wait for the refetch to land before paginating.
   await page.getByRole('button', { name: /show archived notes/i }).click();
+  await waitForNotesListReady(page);
 
   // Note must appear in the archived view
   const archivedItem = await findNoteItem(page, noteTitle);
@@ -90,8 +113,9 @@ test('unarchive a note: it disappears from the archived view and returns to the 
     timeout: 5000,
   });
 
-  // Switch to archived view and confirm it is there
+  // Switch to archived view and wait for the refetch to land before paginating.
   await page.getByRole('button', { name: /show archived notes/i }).click();
+  await waitForNotesListReady(page);
   const archivedItem = await findNoteItem(page, noteTitle);
   await expect(archivedItem).toBeVisible();
 
@@ -106,12 +130,10 @@ test('unarchive a note: it disappears from the archived view and returns to the 
   });
 
   // Switch back to active view — note must reappear.
-  // Use toBeVisible (which auto-retries) directly on the expected item so the
-  // assertion waits for the list fetch to complete before we call findNoteItem.
+  // Wait for the list to be ready (the view switch triggers an async refetch;
+  // findNoteItem uses waitFor per-page so it won't race the refetch).
   await page.getByRole('button', { name: /show active notes/i }).click();
-  await expect(page.getByRole('listitem').filter({ hasText: noteTitle })).toBeVisible({
-    timeout: 8000,
-  });
+  await waitForNotesListReady(page);
   const restoredItem = await findNoteItem(page, noteTitle);
   await expect(restoredItem).toBeVisible();
 });
