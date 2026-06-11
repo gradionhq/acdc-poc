@@ -1,0 +1,230 @@
+/*
+ * App layout styles — CSS Module.
+ * All values reference design-system tokens; no magic numbers.
+ */
+
+/* ── Page layout ─────────────────────────────────────────────── */
+
+.page {
+  max-width: 48rem; /* ~768 px */
+  margin: var(--space-8) auto;
+  padding: 0 var(--space-4);
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-surface-border);
+}
+
+.pageTitle {
+  margin: 0;
+  color: var(--color-text);
+}
+
+/* ── Alert banner ────────────────────────────────────────────── */
+
+.alert {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  background-color: var(--color-alert-bg);
+  border: 1px solid var(--color-alert-border);
+  border-radius: var(--radius-base);
+  color: var(--color-alert-text);
+  font-size: var(--font-size-sm);
+}
+
+/* ── Search / filter bar ─────────────────────────────────────── */
+
+.filterBar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+/* ── Card (create-note form + note list items) ───────────────── */
+
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5) var(--space-6);
+}
+
+/* ── Form ────────────────────────────────────────────────────── */
+
+.form {
+  margin-bottom: var(--space-6);
+}
+
+.formTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-4);
+  color: var(--color-text);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-base);
+  transition: border-color 0.15s ease;
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.formActions {
+  margin-top: var(--space-4);
+}
+
+/* ── Note list ───────────────────────────────────────────────── */
+
+.noteList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.noteCard {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4) var(--space-5);
+}
+
+.noteHeader {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.noteTitle {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.noteBody {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  line-height: var(--line-height-normal);
+  margin-bottom: var(--space-3);
+}
+
+.pinnedBadge {
+  font-size: var(--font-size-xs);
+}
+
+/* ── Tag chips ───────────────────────────────────────────────── */
+
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.tag {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+  background-color: var(--color-tag-bg);
+  border: 1px solid var(--color-tag-border);
+  border-radius: var(--radius-full);
+}
+
+/* ── Note action buttons ─────────────────────────────────────── */
+
+.noteActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ── Attachments panel ───────────────────────────────────────── */
+
+.attachmentsPanel {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-base);
+}
+
+.attachmentUpload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+}
+
+.attachmentList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+
+.attachmentEmpty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* ── Pagination ──────────────────────────────────────────────── */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-surface-border);
+}
+
+.pageInfo {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}

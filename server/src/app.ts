@@ -7,6 +7,8 @@ import { NoteStore } from './store.js';
 import { createNotesRouter } from './notes.js';
 import { createHealthRouter } from './health.js';
 import { createOpenApiRouter } from './openapi.js';
+import { requestLogger } from './logger.js';
+import { createRateLimiter } from './rateLimiter.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // dist/src/app.js → ../../../web/dist  ;  src/app.ts (tsx dev) → ../../web/dist
@@ -16,12 +18,29 @@ const webDist = fs.existsSync(path.join(here, '../../../web/dist'))
 
 export function createApp(store: NoteStore = new NoteStore()): Express {
   const app = express();
+
+  // Request logging (quiet in test env).
+  app.use(requestLogger);
+
+  // Rate limiting — applied to /api/* only (static assets are not subject to limits).
+  // GET /api/health is exempt from rate limiting (see exemptPaths in rateLimiter.ts).
+  app.use('/api', createRateLimiter());
+
   app.use(express.json());
 
   // API first.
   app.use('/api/health', createHealthRouter());
   app.use('/api/openapi.json', createOpenApiRouter());
   app.use('/api/notes', createNotesRouter(store));
+  // Test-only reset endpoint. Mounted ONLY when ENABLE_TEST_RESET=1 (set by the
+  // e2e webServer). Never present in production — there is no way to enable it
+  // without the env flag, so it cannot be reached by clients.
+  if (process.env.ENABLE_TEST_RESET === '1') {
+    app.post('/api/test/reset', (_req: Request, res: Response) => {
+      store.reset();
+      res.status(204).end();
+    });
+  }
   // Any other /api/* is a JSON 404 — never the SPA fallback.
   app.use('/api', (_req: Request, res: Response) => res.status(404).json({ error: 'not found' }));
 

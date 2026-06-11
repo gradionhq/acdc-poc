@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 
 test('create then delete a note', async ({ page }) => {
   // Unique per run so a leftover note from an interrupted local re-run (the store
