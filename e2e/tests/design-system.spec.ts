@@ -24,7 +24,7 @@ test('design-system tokens are present on :root', async ({ page }) => {
   expect(primaryColor).toBeTruthy();
   // The token must resolve to a hex color (the exact shade may be
   // normalized by the browser, so we test format rather than value).
-  expect(primaryColor).toMatch(/^#[0-9a-f]{3,6}$/i);
+  expect(primaryColor).toMatch(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
 
   // Spacing token must also be present — confirms the full token set loaded.
   const space4 = await page.evaluate(() =>

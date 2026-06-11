@@ -13,8 +13,8 @@
   --color-primary-fg: #ffffff;
 
   /* Secondary / neutral */
-  --color-secondary: #6b7280; /* gray-500 */
-  --color-secondary-hover: #4b5563; /* gray-600 */
+  --color-secondary: #4b5563; /* gray-600 — AA-compliant (~7:1) with white text */
+  --color-secondary-hover: #374151; /* gray-700 */
   --color-secondary-fg: #ffffff;
 
   /* Danger */
@@ -35,6 +35,10 @@
   --color-alert-bg: #fef2f2; /* red-50 */
   --color-alert-border: #fecaca; /* red-200 */
   --color-alert-text: #b91c1c; /* red-700 */
+
+  /* Tag chip */
+  --color-tag-bg: #eff6ff; /* blue-50 */
+  --color-tag-border: #bfdbfe; /* blue-200 */
 
   /* Focus ring */
   --color-focus-ring: #93c5fd; /* blue-300 */
