@@ -1472,6 +1472,7 @@ describe('App — title-sort create with duplicate titles', () => {
             title: string;
             body: string;
             tags?: string[];
+            color?: NoteColor;
           };
           const n = {
             id: String(nextId++),
@@ -1479,6 +1480,7 @@ describe('App — title-sort create with duplicate titles', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
           return new Response(JSON.stringify(n), { status: 201 });
@@ -1551,6 +1553,7 @@ describe('App — duplicate sort-aware navigation', () => {
             body: source.body,
             tags: [...source.tags],
             pinned: false,
+            color: 'none' as NoteColor,
           };
           notes.push(copy);
           return new Response(JSON.stringify(copy), { status: 201 });
@@ -1701,6 +1704,7 @@ describe('App — create with pinned notes', () => {
             title: string;
             body: string;
             tags?: string[];
+            color?: NoteColor;
           };
           const n = {
             id: String(nextId++),
@@ -1708,6 +1712,7 @@ describe('App — create with pinned notes', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
           return new Response(JSON.stringify(n), { status: 201 });
@@ -1772,6 +1777,7 @@ describe('App — create with pinned notes', () => {
             title: string;
             body: string;
             tags?: string[];
+            color?: NoteColor;
           };
           const n = {
             id: String(nextId++),
@@ -1779,6 +1785,7 @@ describe('App — create with pinned notes', () => {
             body: b.body,
             tags: b.tags ?? [],
             pinned: false,
+            color: b.color ?? ('none' as NoteColor),
           };
           notes.push(n);
           return new Response(JSON.stringify(n), { status: 201 });
