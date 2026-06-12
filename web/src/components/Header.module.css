@@ -127,10 +127,32 @@
   /* Allow the header row to wrap so long action buttons don't overflow */
   .pageHeader {
     align-items: flex-start;
+    gap: var(--space-3);
   }
 
   /* Scale down the page title so it doesn't consume the full row */
   .pageTitle {
     font-size: var(--font-size-xl);
+  }
+
+  /* Let the actions row wrap if the viewport is very narrow */
+  .headerActions {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  /* Help panel: reduce horizontal padding and let content reflow */
+  .helpPanel {
+    padding: var(--space-3) var(--space-3);
+  }
+
+  /* Shortcut list: allow key + description to wrap so kbd never clips */
+  .shortcutItem {
+    flex-wrap: wrap;
+    gap: var(--space-1);
+  }
+
+  .kbd {
+    min-width: 2.5rem;
   }
 }

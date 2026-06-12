@@ -16,6 +16,8 @@
 
 html {
   font-size: 100%; /* respect user browser settings */
+  /* Prevent horizontal scroll caused by any overflow on the root level */
+  overflow-x: hidden;
 }
 
 body {

@@ -89,3 +89,39 @@
   outline: none;
   box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
+
+/* ── Responsive overrides — ≤ 480 px ─────────────────────────── */
+
+@media (max-width: 480px) {
+  .panel {
+    padding: var(--space-4) var(--space-3);
+  }
+
+  /* Tag rows stack: tag chip + count on one row, actions below */
+  .tagRow {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-3) 0;
+  }
+
+  /* Tag name and count share the first line */
+  .tagName {
+    flex: 0 0 auto;
+  }
+
+  .tagCount {
+    flex: 1 1 auto;
+  }
+
+  /* Action buttons go to their own row, full-width each */
+  .tagRow > button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* Rename input takes full row width */
+  .renameInput {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+}

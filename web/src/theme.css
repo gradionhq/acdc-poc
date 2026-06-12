@@ -40,6 +40,8 @@
   gap: var(--space-2);
   z-index: 1000;
   max-width: 360px;
+  /* Prevent overflow on narrow screens */
+  width: calc(100vw - 2rem);
   pointer-events: none;
 }
 
@@ -92,8 +94,13 @@
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   line-height: 1;
-  min-height: 0;
-  min-width: 0;
+  /* Meet 44px touch target minimum */
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .toast__dismiss:hover:not(:disabled) {

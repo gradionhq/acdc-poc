@@ -38,6 +38,9 @@
 
 @media (max-width: 480px) {
   .page {
+    margin-top: var(--space-4);
     padding: 0 var(--space-3);
+    /* Prevent any child from overflowing the page column */
+    overflow-x: hidden;
   }
 }

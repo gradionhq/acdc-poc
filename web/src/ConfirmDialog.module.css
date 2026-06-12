@@ -65,4 +65,25 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* ── Responsive overrides — ≤ 480 px ─────────────────────────── */
+
+@media (max-width: 480px) {
+  .dialog {
+    width: calc(100vw - var(--space-6));
+    padding: var(--space-4);
+  }
+
+  /* Stack buttons full-width so they remain comfortably tappable */
+  .actions {
+    flex-direction: column-reverse;
+    gap: var(--space-2);
+  }
+
+  .actions > * {
+    width: 100%;
+    justify-content: center;
+  }
 }

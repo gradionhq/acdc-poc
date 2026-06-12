@@ -134,6 +134,71 @@ test.describe('mobile layout — 375 × 812', () => {
     expect(box).not.toBeNull();
     expect(box!.height).toBeGreaterThanOrEqual(44);
   });
+
+  test('filter bar inputs meet 44 px touch target', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+
+    const searchInput = page.getByRole('textbox', { name: /search notes/i });
+    await expect(searchInput).toBeVisible();
+    const searchBox = await searchInput.boundingBox();
+    expect(searchBox).not.toBeNull();
+    expect(searchBox!.height).toBeGreaterThanOrEqual(44);
+
+    expect(await hasHorizontalScrollbar(page)).toBe(false);
+  });
+
+  test('header icon buttons meet 44 px touch target', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+
+    const helpBtn = page.getByRole('button', { name: /show keyboard shortcuts/i });
+    await expect(helpBtn).toBeVisible();
+    const helpBox = await helpBtn.boundingBox();
+    expect(helpBox).not.toBeNull();
+    expect(helpBox!.height).toBeGreaterThanOrEqual(44);
+
+    const themeBtn = page.getByRole('button', { name: /(switch to (light|dark) mode)/i });
+    await expect(themeBtn).toBeVisible();
+    const themeBox = await themeBtn.boundingBox();
+    expect(themeBox).not.toBeNull();
+    expect(themeBox!.height).toBeGreaterThanOrEqual(44);
+
+    expect(await hasHorizontalScrollbar(page)).toBe(false);
+  });
+
+  test('note card action buttons meet 44 px touch target', async ({ page }) => {
+    const stamp = Date.now();
+    const title = `[mobile-e2e] Actions-${stamp}`;
+
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+
+    await createNote(page, title, 'body for action test');
+
+    // Find pin/edit/archive buttons on the newly created note card
+    const item = page.getByRole('listitem').filter({ hasText: title });
+    await expect(item).toBeVisible();
+
+    // Use exact string match to avoid regex special-character issues with the title
+    const archiveBtn = item.getByRole('button', { name: `Archive ${title}`, exact: true });
+    await expect(archiveBtn).toBeVisible();
+    const box = await archiveBtn.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+
+    expect(await hasHorizontalScrollbar(page)).toBe(false);
+  });
+
+  test('help panel opens without causing horizontal overflow', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+
+    await page.getByRole('button', { name: /show keyboard shortcuts/i }).click();
+    await expect(page.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeVisible();
+
+    expect(await hasHorizontalScrollbar(page)).toBe(false);
+  });
 });
 
 test.describe('mobile layout — 320 px width (no horizontal scroll)', () => {
@@ -157,6 +222,47 @@ test.describe('mobile layout — 320 px width (no horizontal scroll)', () => {
 
     const item = page.getByRole('listitem').filter({ hasText: title });
     await expect(item).toBeVisible();
+
+    expect(await hasHorizontalScrollbar(page)).toBe(false);
+  });
+
+  test('no horizontal scroll after opening help panel at 320 px', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+
+    await page.getByRole('button', { name: /show keyboard shortcuts/i }).click();
+    await expect(page.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeVisible();
+
+    expect(await hasHorizontalScrollbar(page)).toBe(false);
+  });
+
+  test('filter bar visible and usable at 320 px', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+
+    const searchInput = page.getByRole('textbox', { name: /search notes/i });
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill('test search');
+
+    expect(await hasHorizontalScrollbar(page)).toBe(false);
+  });
+
+  test('pagination buttons visible at 320 px', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
+
+    const prevBtn = page.getByRole('button', { name: /previous page/i });
+    const nextBtn = page.getByRole('button', { name: /next page/i });
+
+    await expect(prevBtn).toBeVisible();
+    await expect(nextBtn).toBeVisible();
+
+    const prevBox = await prevBtn.boundingBox();
+    const nextBox = await nextBtn.boundingBox();
+    expect(prevBox).not.toBeNull();
+    expect(nextBox).not.toBeNull();
+    expect(prevBox!.height).toBeGreaterThanOrEqual(44);
+    expect(nextBox!.height).toBeGreaterThanOrEqual(44);
 
     expect(await hasHorizontalScrollbar(page)).toBe(false);
   });

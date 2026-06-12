@@ -74,6 +74,8 @@
 .inputWithIcon,
 .select {
   width: 100%;
+  /* Ensure ≥44px touch target height on all viewports */
+  min-height: 44px;
   padding: var(--space-2) var(--space-3);
   font-size: var(--font-size-sm);
   font-family: var(--font-family-base);
@@ -116,6 +118,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  /* Meets 44px touch target */
+  min-height: 44px;
   padding: var(--space-2) var(--space-3);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
@@ -148,4 +152,25 @@
 .toggleBtnActive:hover {
   background-color: var(--color-tag-bg);
   border-color: var(--color-primary);
+}
+
+/* ── Responsive overrides — ≤ 480 px ─────────────────────────── */
+
+@media (max-width: 480px) {
+  /* Each field takes full row width so filters stack cleanly */
+  .fieldSearch,
+  .fieldTag,
+  .fieldSort {
+    flex: 1 1 100%;
+  }
+
+  /* Toggle button stretches full-width when stacked */
+  .fieldToggle {
+    width: 100%;
+  }
+
+  .toggleBtn {
+    width: 100%;
+    justify-content: center;
+  }
 }
