@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
-import { deleteTag, listTags, renameTag, type TagStat } from './api';
+import {
+  deleteTag,
+  listTags,
+  renameTag,
+  setTagColor,
+  TAG_COLORS,
+  type TagColor,
+  type TagStat,
+} from './api';
 import { Button } from './components/Button';
+import { TagChip } from './components/TagChip';
 import styles from './TagManager.module.css';
 
 interface Props {
@@ -60,6 +69,17 @@ export function TagManager({ onChanged }: Props) {
     }
   }
 
+  async function handleColorChange(tag: string, color: TagColor) {
+    setError(null);
+    try {
+      await setTagColor(tag, color);
+      await load();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   async function handleDelete(tag: string) {
     if (!window.confirm(`Delete tag "${tag}" from all notes?`)) return;
     setError(null);
@@ -84,7 +104,7 @@ export function TagManager({ onChanged }: Props) {
       {!loading && tags.length === 0 && <p className={styles.empty}>No tags in use yet.</p>}
       {tags.length > 0 && (
         <ul className={styles.tagList} aria-label="Tag list">
-          {tags.map(({ tag, count }) => (
+          {tags.map(({ tag, count, color }) => (
             <li key={tag} className={styles.tagRow}>
               {renamingTag === tag ? (
                 <>
@@ -108,15 +128,34 @@ export function TagManager({ onChanged }: Props) {
                 </>
               ) : (
                 <>
-                  <span className={styles.tagName} data-tag={tag}>
-                    {tag}
-                  </span>
+                  <TagChip tag={tag} color={color} className={styles.tagName} />
                   <span
                     className={styles.tagCount}
                     aria-label={`${count} note${count === 1 ? '' : 's'}`}
                   >
                     {count} {count === 1 ? 'note' : 'notes'}
                   </span>
+                  <fieldset className={styles.colorPicker}>
+                    <legend className={styles.srOnly}>Color for {tag}</legend>
+                    {TAG_COLORS.map((c) => {
+                      const swatchKey = `swatch-${c}` as keyof typeof styles;
+                      const cls = [
+                        styles.colorSwatch,
+                        styles[swatchKey],
+                        color === c ? styles.colorSwatchSelected : '',
+                      ].join(' ');
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          aria-label={`Set ${tag} color ${c}`}
+                          aria-pressed={color === c}
+                          className={cls}
+                          onClick={() => void handleColorChange(tag, c)}
+                        />
+                      );
+                    })}
+                  </fieldset>
                   <Button
                     variant="secondary"
                     aria-label={`Rename tag ${tag}`}

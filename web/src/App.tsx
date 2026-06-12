@@ -14,6 +14,7 @@ import {
   duplicateNote,
   listAttachments,
   listNotes,
+  listTags,
   toggleArchive,
   togglePin,
   updateNote,
@@ -22,6 +23,8 @@ import {
   type Note,
   type NoteColor,
   type SortOrder,
+  type TagColor,
+  type TagStat,
 } from './api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ToastContainer } from './ToastContainer';
@@ -56,6 +59,8 @@ export function App() {
   const { toasts, addToast, dismissToast } = useToast();
   const [showTagManager, setShowTagManager] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
+  /** All tags in use with their colors — drives chip colors and the filter row. */
+  const [tags, setTags] = useState<TagStat[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [tagsInput, setTagsInput] = useState('');
@@ -131,10 +136,32 @@ export function App() {
     }
   }
 
+  // Load the tag list (names + colors) so chips can be painted everywhere.
+  // Best-effort: failure here must not break the notes view, so errors are
+  // swallowed (the chips simply fall back to the default style).
+  const refreshTags = useCallback(async () => {
+    try {
+      setTags(await listTags());
+    } catch {
+      // ignore — chips fall back to default styling
+    }
+  }, []);
+
   useEffect(() => {
     void refresh(page, query, tagFilter, sort, showArchived);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, query, tagFilter, sort, showArchived]);
+
+  // Loaded once on mount (and refreshed after mutations); kept separate from the
+  // notes refresh so it never blocks or interferes with the primary list load.
+  useEffect(() => {
+    void refreshTags();
+  }, [refreshTags]);
+
+  /** tag name → assigned color (null when unset), derived from `tags`. */
+  const tagColors: Record<string, TagColor | null> = Object.fromEntries(
+    tags.map(({ tag, color }) => [tag, color]),
+  );
 
   // Debounce search input: update `query` after SEARCH_DEBOUNCE_MS of inactivity.
   // Reset to page 1 whenever the query changes so results are always from the start.
@@ -185,6 +212,7 @@ export function App() {
       setColor('none');
       setError(null);
       addToast('Note created', 'success');
+      void refreshTags();
       // Clear both active filters before navigating so the new note is always
       // visible (it may not match the active query or tag filter).
       // pageContainingNote fetches the fully unfiltered list, so clearing both
@@ -246,6 +274,7 @@ export function App() {
       setEditColor('none');
       setError(null);
       addToast('Note updated', 'success');
+      void refreshTags();
       await refresh(page);
     } catch (e: unknown) {
       addToast('Failed to update note', 'error');
@@ -389,6 +418,7 @@ export function App() {
       await deleteNote(id);
       setError(null);
       addToast('Note deleted', 'success');
+      void refreshTags();
       // After deletion the current page may become empty; go back one if needed
       const newTotal = total - 1;
       const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
@@ -409,6 +439,7 @@ export function App() {
       const copy = await duplicateNote(id);
       setError(null);
       addToast('Note duplicated', 'success');
+      void refreshTags();
       // Clear both active filters before navigating so the duplicated note is
       // always visible (it may not match the active query or tag filter).
       // pageContainingNote fetches the fully unfiltered list, so clearing both
@@ -502,7 +533,10 @@ export function App() {
         onCloseHelp={() => setShowHelp(false)}
         showTagManager={showTagManager}
         onToggleTagManager={() => setShowTagManager((v) => !v)}
-        onTagsChanged={() => void refresh(page, query, tagFilter)}
+        onTagsChanged={() => {
+          void refresh(page, query, tagFilter);
+          void refreshTags();
+        }}
         helpToggleRef={helpToggleRef}
         helpCloseBtnRef={helpCloseBtnRef}
       />
@@ -535,6 +569,7 @@ export function App() {
           setShowArchived((v) => !v);
         }}
         searchInputRef={searchInputRef}
+        tags={tags}
       />
 
       <NoteComposer
@@ -552,6 +587,7 @@ export function App() {
 
       <NoteList
         notes={notes}
+        tagColors={tagColors}
         initialLoading={initialLoading}
         isFilterActive={isFilterActive}
         showEmptyState={showEmptyState}

@@ -4,10 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { TagManager } from './TagManager';
 import { App } from './App';
 
-type TagStat = { tag: string; count: number };
+type TagColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'gray';
+type TagStat = { tag: string; count: number; color: TagColor | null };
 
-function mockTagFetch(initial: TagStat[] = []) {
-  let tags: TagStat[] = [...initial];
+function mockTagFetch(
+  initial: Array<{ tag: string; count: number; color?: TagColor | null }> = [],
+) {
+  let tags: TagStat[] = initial.map((t) => ({ color: null, ...t }));
 
   vi.stubGlobal(
     'fetch',
@@ -30,11 +33,19 @@ function mockTagFetch(initial: TagStat[] = []) {
         tags = tags.map((t) => {
           if (t.tag === from) {
             affected++;
-            return { tag: to, count: t.count };
+            return { tag: to, count: t.count, color: t.color };
           }
           return t;
         });
         return new Response(JSON.stringify({ affected }), { status: 200 });
+      }
+
+      // PUT /api/tags/:name — set color
+      if (init?.method === 'PUT' && urlStr.includes('/api/tags/')) {
+        const tag = decodeURIComponent(urlStr.split('/api/tags/')[1]);
+        const { color } = JSON.parse(String(init.body)) as { color: TagColor };
+        tags = tags.map((t) => (t.tag === tag ? { ...t, color } : t));
+        return new Response(JSON.stringify({ tag, color }), { status: 200 });
       }
 
       // DELETE /api/tags/:tag
@@ -222,6 +233,70 @@ describe('TagManager', () => {
 
     expect(screen.queryByRole('textbox', { name: /rename esc-test/i })).not.toBeInTheDocument();
     expect(screen.getByText('esc-test')).toBeInTheDocument();
+  });
+
+  it('renders a color swatch button for every palette color', async () => {
+    mockTagFetch([{ tag: 'work', count: 1 }]);
+    render(<TagManager onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText('work')).toBeInTheDocument());
+    for (const color of ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray']) {
+      expect(
+        screen.getByRole('button', { name: new RegExp(`set work color ${color}`, 'i') }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it('assigns a color and marks its swatch as pressed', async () => {
+    const onChanged = vi.fn();
+    mockTagFetch([{ tag: 'work', count: 1 }]);
+    render(<TagManager onChanged={onChanged} />);
+
+    await waitFor(() => expect(screen.getByText('work')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /set work color blue/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /set work color blue/i })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    );
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('reflects a pre-existing color via aria-pressed', async () => {
+    mockTagFetch([{ tag: 'urgent', count: 2, color: 'red' }]);
+    render(<TagManager onChanged={vi.fn()} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /set urgent color red/i })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    );
+  });
+
+  it('shows an error when setting a color fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const urlStr = url as string;
+        if (init?.method === 'PUT') {
+          return new Response(JSON.stringify({ error: 'bad color' }), { status: 400 });
+        }
+        if (urlStr.includes('/api/tags')) {
+          return new Response(JSON.stringify([{ tag: 'work', count: 1, color: null }]), {
+            status: 200,
+          });
+        }
+        return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+      }),
+    );
+    render(<TagManager onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText('work')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /set work color blue/i }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/bad color/i));
   });
 });
 
