@@ -236,7 +236,7 @@ export function NoteCard({
     >
       {/* ── Card header: title + pinned badge ── */}
       <div className={styles.noteHeader}>
-        <span className={styles.noteTitle}>{n.title}</span>
+        <h3 className={styles.noteTitle}>{n.title}</h3>
         {n.pinned && (
           <span aria-label="Pinned" className={styles.pinnedBadge}>
             <Pin size={12} aria-hidden="true" />

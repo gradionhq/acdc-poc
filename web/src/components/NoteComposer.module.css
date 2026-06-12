@@ -113,7 +113,10 @@
 .wordCount {
   margin: 0;
   font-size: var(--font-size-xs);
-  color: var(--color-text-subtle);
+  /* Use the "muted" token (not "subtle"): subtle is reserved for placeholder/
+     disabled text and fails WCAG AA (4.5:1) as visible body text. Muted meets
+     AA against the surface in both light and dark themes. */
+  color: var(--color-text-muted);
   text-align: right;
   margin-top: calc(-1 * var(--space-2));
 }

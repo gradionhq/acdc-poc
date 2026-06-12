@@ -3,6 +3,13 @@
  * All values reference design-system tokens; no magic numbers.
  */
 
+/* ── Notes region landmark ───────────────────────────────────── */
+/* Transparent wrapper: provides a labelled landmark for screen readers
+   without introducing a new box in the layout flow. */
+.noteListRegion {
+  display: contents;
+}
+
 /* ── Skeleton note card shell (mirrors NoteCard.module.css .noteCard) ── */
 
 .noteCard {

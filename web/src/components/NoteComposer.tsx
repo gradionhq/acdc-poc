@@ -34,7 +34,7 @@ export function NoteComposer({
   const chars = countChars(body);
 
   return (
-    <form onSubmit={onSubmit} className={styles.form}>
+    <form onSubmit={onSubmit} aria-label="New note" className={styles.form}>
       <div className={`${styles.card} ${styles.fieldGroup}`}>
         <div className={styles.formHeader}>
           <PenLine size={16} className={styles.formTitleIcon} aria-hidden="true" />

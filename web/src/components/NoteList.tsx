@@ -49,7 +49,7 @@ export function NoteList({
   newNoteTitleRef,
 }: NoteListProps) {
   return (
-    <>
+    <section aria-label="Notes" className={styles.noteListRegion}>
       {/* Loading skeleton — only on initial load, not background refresh */}
       {initialLoading && (
         <ul aria-label="Loading notes" aria-busy="true" className={styles.noteList}>
@@ -123,6 +123,6 @@ export function NoteList({
           ))}
         </ul>
       )}
-    </>
+    </section>
   );
 }
