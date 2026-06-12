@@ -12,7 +12,7 @@ async function createNote(
   await titleInput.fill(title);
   await page.getByLabel(/^body$/i).fill(body);
   if (tags !== undefined) {
-    await page.getByRole('textbox', { name: /^tags$/i }).fill(tags);
+    await page.getByRole('combobox', { name: /^tags$/i }).fill(tags);
   }
   await page.getByRole('button', { name: /add note/i }).click();
   await expect(titleInput).toHaveValue('');

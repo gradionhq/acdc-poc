@@ -1,0 +1,42 @@
+/*
+ * TagSuggestionsInput — dropdown suggestion list styles.
+ * The wrapper + icon styles reuse NoteComposer.module.css tokens.
+ */
+
+.dropdown {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: 0;
+  z-index: 100;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1) 0;
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-base);
+  box-shadow: var(--shadow-md);
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.option {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.option:hover {
+  background-color: var(--color-surface);
+}
+
+.optionActive {
+  background-color: var(--color-primary);
+  color: var(--color-surface-raised);
+}
+
+.optionActive:hover {
+  background-color: var(--color-primary);
+}

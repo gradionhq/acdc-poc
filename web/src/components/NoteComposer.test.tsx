@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import { NoteComposer } from './NoteComposer';
 import type { NoteColor } from '../api';
+import { within } from '@testing-library/react';
 
 function renderComposer(overrides: Partial<Parameters<typeof NoteComposer>[0]> = {}) {
   const ref = createRef<HTMLInputElement>();
@@ -42,7 +43,12 @@ describe('NoteComposer', () => {
 
   it('renders a Tags input with aria-label "Tags"', () => {
     renderComposer();
-    expect(screen.getByRole('textbox', { name: /^tags$/i })).toBeInTheDocument();
+    // TagSuggestionsInput uses role="combobox" — fall back to combobox if
+    // textbox is not found (combobox is a superset of textbox for AT purposes).
+    const tagsInput =
+      screen.queryByRole('textbox', { name: /^tags$/i }) ??
+      screen.getByRole('combobox', { name: /^tags$/i });
+    expect(tagsInput).toBeInTheDocument();
   });
 
   it('renders an "Add note" submit button', () => {
@@ -67,7 +73,10 @@ describe('NoteComposer', () => {
   it('calls onTagsInputChange when typing in the tags input', async () => {
     const onTagsInputChange = vi.fn();
     renderComposer({ onTagsInputChange });
-    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'foo');
+    const tagsInput =
+      screen.queryByRole('textbox', { name: /^tags$/i }) ??
+      screen.getByRole('combobox', { name: /^tags$/i });
+    await userEvent.type(tagsInput, 'foo');
     expect(onTagsInputChange).toHaveBeenCalled();
   });
 
@@ -131,6 +140,29 @@ describe('NoteComposer', () => {
 
   it('reflects controlled value in tags input', () => {
     renderComposer({ tagsInput: 'foo, bar' });
-    expect(screen.getByRole('textbox', { name: /^tags$/i })).toHaveValue('foo, bar');
+    const tagsInput =
+      screen.queryByRole('textbox', { name: /^tags$/i }) ??
+      screen.getByRole('combobox', { name: /^tags$/i });
+    expect(tagsInput).toHaveValue('foo, bar');
+  });
+
+  it('shows tag suggestions when tagSuggestions are provided and user types', async () => {
+    renderComposer({ tagsInput: 'al', tagSuggestions: ['alpha', 'beta'] });
+    const tagsInput =
+      screen.queryByRole('textbox', { name: /^tags$/i }) ??
+      screen.getByRole('combobox', { name: /^tags$/i });
+    await userEvent.click(tagsInput);
+    const listbox = screen.queryByRole('listbox');
+    expect(listbox).toBeInTheDocument();
+    expect(within(listbox!).getByRole('option', { name: 'alpha' })).toBeInTheDocument();
+  });
+
+  it('does not show listbox when tagSuggestions is empty', async () => {
+    renderComposer({ tagsInput: 'al', tagSuggestions: [] });
+    const tagsInput =
+      screen.queryByRole('textbox', { name: /^tags$/i }) ??
+      screen.getByRole('combobox', { name: /^tags$/i });
+    await userEvent.click(tagsInput);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 });

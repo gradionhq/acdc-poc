@@ -1,8 +1,9 @@
 import type { RefObject, FormEvent } from 'react';
-import { PenLine, Tag } from 'lucide-react';
+import { PenLine } from 'lucide-react';
 import { Button } from './Button';
 import { NOTE_COLORS, type NoteColor } from '../api';
 import { countWords, countChars } from '../wordCount';
+import { TagSuggestionsInput } from './TagSuggestionsInput';
 import styles from './NoteComposer.module.css';
 
 export interface NoteComposerProps {
@@ -12,6 +13,8 @@ export interface NoteComposerProps {
   onBodyChange: (value: string) => void;
   tagsInput: string;
   onTagsInputChange: (value: string) => void;
+  /** Existing tag names used to power the autocomplete suggestion list. */
+  tagSuggestions?: string[];
   color: NoteColor;
   onColorChange: (color: NoteColor) => void;
   onSubmit: (e: FormEvent) => void;
@@ -25,6 +28,7 @@ export function NoteComposer({
   onBodyChange,
   tagsInput,
   onTagsInputChange,
+  tagSuggestions = [],
   color,
   onColorChange,
   onSubmit,
@@ -74,17 +78,13 @@ export function NoteComposer({
           <label className={styles.fieldLabel} htmlFor="composer-tags">
             Tags
           </label>
-          <div className={styles.tagsWrapper}>
-            <Tag size={14} className={styles.tagsIcon} aria-hidden="true" />
-            <input
-              id="composer-tags"
-              className={`${styles.input} ${styles.tagsInput}`}
-              aria-label="Tags"
-              placeholder="comma-separated tags"
-              value={tagsInput}
-              onChange={(e) => onTagsInputChange(e.target.value)}
-            />
-          </div>
+          <TagSuggestionsInput
+            id="composer-tags"
+            ariaLabel="Tags"
+            value={tagsInput}
+            onChange={onTagsInputChange}
+            suggestions={tagSuggestions}
+          />
         </div>
 
         <fieldset className={styles.colorFieldset}>

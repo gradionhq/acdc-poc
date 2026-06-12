@@ -191,6 +191,17 @@ function mockFetchSequence() {
         notes = notes.filter((n) => n.id !== id);
         return new Response(null, { status: 204 });
       }
+      // GET /api/tags — return aggregated tag stats
+      if (urlStr.includes('/api/tags') && !urlStr.includes('/rename')) {
+        const tagCounts: Record<string, number> = {};
+        for (const n of notes) {
+          for (const t of n.tags) {
+            tagCounts[t] = (tagCounts[t] ?? 0) + 1;
+          }
+        }
+        const stats = Object.entries(tagCounts).map(([tag, count]) => ({ tag, count }));
+        return new Response(JSON.stringify(stats), { status: 200 });
+      }
       // Parse page/pageSize/q/tag/tags/tagMode/sort/archived from URL
       const urlObj = new URL(urlStr, 'http://localhost');
       const page = Number(urlObj.searchParams.get('page') ?? '1');
@@ -924,7 +935,7 @@ describe('App — tags', () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Tagged note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'note body');
-    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'alpha, beta');
+    await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'alpha, beta');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     await waitFor(() => expect(screen.getByText('Tagged note')).toBeInTheDocument());
@@ -936,7 +947,7 @@ describe('App — tags', () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Note for tags edit');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
-    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'oldtag');
+    await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'oldtag');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     await waitFor(() => expect(screen.getByText('Note for tags edit')).toBeInTheDocument());
@@ -957,14 +968,14 @@ describe('App — tags', () => {
 
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Work note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
-    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'work');
+    await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'work');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     await waitFor(() => expect(screen.getByText('Work note')).toBeInTheDocument());
 
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Personal note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
-    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'personal');
+    await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'personal');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     await waitFor(() => expect(screen.getByText('Personal note')).toBeInTheDocument());
@@ -982,7 +993,7 @@ describe('App — tag deduplication', () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Dup tag note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
-    await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'alpha, beta, alpha');
+    await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'alpha, beta, alpha');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
     // Only two distinct tags should appear in the rendered note — no duplicate spans
@@ -2258,7 +2269,7 @@ describe('App — create and duplicate with both query and tag filter active', (
     for (const t of titles) {
       await userEvent.type(screen.getByLabelText(/^title$/i), t);
       await userEvent.type(screen.getByLabelText(/^body$/i), `${t} body`);
-      await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'fruit');
+      await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'fruit');
       await userEvent.click(screen.getByRole('button', { name: /add note/i }));
       await waitFor(() => expect(screen.getByText(t)).toBeInTheDocument());
     }
@@ -2299,7 +2310,7 @@ describe('App — create and duplicate with both query and tag filter active', (
     for (const t of titles) {
       await userEvent.type(screen.getByLabelText(/^title$/i), t);
       await userEvent.type(screen.getByLabelText(/^body$/i), `${t} body`);
-      await userEvent.type(screen.getByRole('textbox', { name: /^tags$/i }), 'fruit');
+      await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'fruit');
       await userEvent.click(screen.getByRole('button', { name: /add note/i }));
       await waitFor(() => expect(screen.getByText(t)).toBeInTheDocument());
     }
