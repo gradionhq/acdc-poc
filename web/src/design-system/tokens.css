@@ -54,6 +54,29 @@
   --color-tag-border: #c7d2fe; /* indigo-200 */
   --color-tag-text: #4338ca; /* indigo-700 — 5.72:1 on indigo-50 (AA) */
 
+  /* ── Per-tag color chips (50 bg / 200 border / 800 text — all AA+) ── */
+  --color-tagchip-red-bg: #fef2f2; /* red-50 */
+  --color-tagchip-red-border: #fecaca; /* red-200 */
+  --color-tagchip-red-text: #991b1b; /* red-800 — 7.5:1 */
+  --color-tagchip-orange-bg: #fff7ed; /* orange-50 */
+  --color-tagchip-orange-border: #fed7aa; /* orange-200 */
+  --color-tagchip-orange-text: #9a3412; /* orange-800 — 6.5:1 */
+  --color-tagchip-yellow-bg: #fefce8; /* yellow-50 */
+  --color-tagchip-yellow-border: #fef08a; /* yellow-200 */
+  --color-tagchip-yellow-text: #854d0e; /* yellow-800 — 6.6:1 */
+  --color-tagchip-green-bg: #f0fdf4; /* green-50 */
+  --color-tagchip-green-border: #bbf7d0; /* green-200 */
+  --color-tagchip-green-text: #166534; /* green-800 — 6.4:1 */
+  --color-tagchip-blue-bg: #eff6ff; /* blue-50 */
+  --color-tagchip-blue-border: #bfdbfe; /* blue-200 */
+  --color-tagchip-blue-text: #1e40af; /* blue-800 — 8.0:1 */
+  --color-tagchip-purple-bg: #faf5ff; /* purple-50 */
+  --color-tagchip-purple-border: #e9d5ff; /* purple-200 */
+  --color-tagchip-purple-text: #6b21a8; /* purple-800 — 7.4:1 */
+  --color-tagchip-gray-bg: #f3f4f6; /* gray-100 */
+  --color-tagchip-gray-border: #d1d5db; /* gray-300 */
+  --color-tagchip-gray-text: #1f2937; /* gray-800 — 12.6:1 */
+
   /* ── Note card color-accent backgrounds ────────────────────── */
   --color-card-red: #fff1f2; /* rose-50 */
   --color-card-yellow: #fefce8; /* yellow-50 */
@@ -111,6 +134,29 @@
   --color-tag-bg: #1e1b4b; /* indigo-950 */
   --color-tag-border: #3730a3; /* indigo-800 */
   --color-tag-text: #a5b4fc; /* indigo-300 — 7.3:1 on indigo-950 (AAA) */
+
+  /* ── Per-tag color chips (950 bg / 800 border / 300 text — all AA+) ── */
+  --color-tagchip-red-bg: #450a0a; /* red-950 */
+  --color-tagchip-red-border: #991b1b; /* red-800 */
+  --color-tagchip-red-text: #fca5a5; /* red-300 — 7.3:1 */
+  --color-tagchip-orange-bg: #431407; /* orange-950 */
+  --color-tagchip-orange-border: #9a3412; /* orange-800 */
+  --color-tagchip-orange-text: #fdba74; /* orange-300 — 8.0:1 */
+  --color-tagchip-yellow-bg: #422006; /* yellow-950 */
+  --color-tagchip-yellow-border: #854d0e; /* yellow-800 */
+  --color-tagchip-yellow-text: #fde047; /* yellow-300 — 11.2:1 */
+  --color-tagchip-green-bg: #052e16; /* green-950 */
+  --color-tagchip-green-border: #166534; /* green-800 */
+  --color-tagchip-green-text: #86efac; /* green-300 — 9.7:1 */
+  --color-tagchip-blue-bg: #172554; /* blue-950 */
+  --color-tagchip-blue-border: #1e40af; /* blue-800 */
+  --color-tagchip-blue-text: #93c5fd; /* blue-300 — 7.6:1 */
+  --color-tagchip-purple-bg: #3b0764; /* purple-950 */
+  --color-tagchip-purple-border: #6b21a8; /* purple-800 */
+  --color-tagchip-purple-text: #d8b4fe; /* purple-300 — 8.8:1 */
+  --color-tagchip-gray-bg: #111827; /* gray-900 */
+  --color-tagchip-gray-border: #4b5563; /* gray-600 */
+  --color-tagchip-gray-text: #d1d5db; /* gray-300 — 11.6:1 */
 
   /* ── Note card color-accent backgrounds (muted dark tints) ─── */
   --color-card-red: #1c0505;

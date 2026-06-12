@@ -154,6 +154,35 @@
   border-color: var(--color-primary);
 }
 
+/* ── Tag chip filter row ─────────────────────────────────────── */
+
+.tagChips {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+/* Clickable chip buttons — strip default button chrome so they read as chips */
+.tagChipButton {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-full);
+}
+
+.tagChipButton:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.tagChipActive {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
 /* ── Responsive overrides — ≤ 480 px ─────────────────────────── */
 
 @media (max-width: 480px) {

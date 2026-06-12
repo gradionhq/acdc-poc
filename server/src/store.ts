@@ -2,6 +2,13 @@
 export const NOTE_COLORS = ['none', 'red', 'yellow', 'green', 'blue', 'purple'] as const;
 export type NoteColor = (typeof NOTE_COLORS)[number];
 
+/**
+ * Fixed palette of named colors a tag may carry. Independent of NOTE_COLORS:
+ * tag colors decorate the tag chips, note colors decorate the card itself.
+ */
+export const TAG_COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'] as const;
+export type TagColor = (typeof TAG_COLORS)[number];
+
 export interface Note {
   id: string;
   title: string;
@@ -48,6 +55,12 @@ export class NoteStore {
    * The key is constructed internally — never derived directly from client input.
    */
   private readonly attachments = new Map<string, Attachment>();
+  /**
+   * Optional per-tag color, keyed by tag name. A tag is absent from this map
+   * until a color is explicitly assigned; absence means "use the default chip
+   * style". Independent of note colors.
+   */
+  private readonly tagColors = new Map<string, TagColor>();
   private seq = 0;
 
   create(input: { title: string; body: string; tags?: string[]; color?: NoteColor }): Note {
@@ -229,10 +242,11 @@ export class NoteStore {
   }
 
   /**
-   * Return every unique tag currently in use, paired with how many notes carry it.
+   * Return every unique tag currently in use, paired with how many notes carry
+   * it and its assigned color (or null when none has been set).
    * Results are sorted alphabetically by tag name.
    */
-  listTags(): Array<{ tag: string; count: number }> {
+  listTags(): Array<{ tag: string; count: number; color: TagColor | null }> {
     const counts = new Map<string, number>();
     for (const note of this.notes.values()) {
       for (const tag of note.tags) {
@@ -240,8 +254,21 @@ export class NoteStore {
       }
     }
     return [...counts.entries()]
-      .map(([tag, count]) => ({ tag, count }))
+      .map(([tag, count]) => ({ tag, count, color: this.tagColors.get(tag) ?? null }))
       .sort((a, b) => a.tag.localeCompare(b.tag));
+  }
+
+  /**
+   * Assign a color to a tag (overwriting any previous color). The tag does not
+   * need to be in use by any note for a color to be stored.
+   */
+  setTagColor(tag: string, color: TagColor): void {
+    this.tagColors.set(tag, color);
+  }
+
+  /** Return the color assigned to a tag, or undefined when none is set. */
+  getTagColor(tag: string): TagColor | undefined {
+    return this.tagColors.get(tag);
   }
 
   /**
@@ -259,6 +286,13 @@ export class NoteStore {
         affected++;
       }
     }
+    // Carry any assigned color across to the new name so the chip keeps its
+    // appearance after a rename.
+    const color = this.tagColors.get(from);
+    if (color !== undefined) {
+      this.tagColors.delete(from);
+      this.tagColors.set(to, color);
+    }
     return affected;
   }
 
@@ -274,6 +308,8 @@ export class NoteStore {
         affected++;
       }
     }
+    // Drop any stored color for the removed tag.
+    this.tagColors.delete(tag);
     return affected;
   }
 
@@ -281,6 +317,7 @@ export class NoteStore {
   reset(): void {
     this.notes.clear();
     this.attachments.clear();
+    this.tagColors.clear();
     this.seq = 0;
   }
 

@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { NoteStore } from './store.js';
+import { NoteStore, TAG_COLORS, type TagColor } from './store.js';
 
 /** Maximum byte-length for a tag name. */
 const MAX_TAG_LENGTH = 100;
@@ -14,6 +14,18 @@ function validateTagName(value: unknown, fieldName: string): string | null {
   if (value.includes(',')) {
     return `${fieldName} must not contain commas`;
   }
+  return null;
+}
+
+const TAG_COLOR_ERROR = `color must be one of: ${TAG_COLORS.join(', ')}`;
+
+/**
+ * Validate a tag color from client input against the fixed palette.
+ * Returns the parsed TagColor on success, or null when the value is invalid.
+ */
+function parseTagColor(value: unknown): TagColor | null {
+  if (typeof value !== 'string') return null;
+  if ((TAG_COLORS as readonly string[]).includes(value)) return value as TagColor;
   return null;
 }
 
@@ -53,6 +65,25 @@ export function createTagsRouter(store: NoteStore): Router {
 
     const affected = store.renameTag(fromTag, toTag);
     res.json({ affected });
+  });
+
+  /** PUT /api/tags/:name — set a tag's color (validated against the palette). */
+  router.put('/:name', (req: Request, res: Response) => {
+    const name = req.params.name;
+    const nameErr = validateTagName(name, 'tag');
+    if (nameErr) {
+      res.status(400).json({ error: nameErr });
+      return;
+    }
+    const { color } = (req.body ?? {}) as { color?: unknown };
+    const parsedColor = parseTagColor(color);
+    if (parsedColor === null) {
+      res.status(400).json({ error: TAG_COLOR_ERROR });
+      return;
+    }
+    const tag = name.trim();
+    store.setTagColor(tag, parsedColor);
+    res.json({ tag, color: parsedColor });
   });
 
   /** DELETE /api/tags/:tag — remove a tag from every note that carries it. */

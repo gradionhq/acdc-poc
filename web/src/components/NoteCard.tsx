@@ -13,17 +13,21 @@ import {
 } from 'lucide-react';
 import { Button } from './Button';
 import { NoteBody } from '../NoteBody';
+import { TagChip } from './TagChip';
 import {
   attachmentDownloadUrl,
   NOTE_COLORS,
   type AttachmentMeta,
   type Note,
   type NoteColor,
+  type TagColor,
 } from '../api';
 import styles from './NoteCard.module.css';
 
 export interface NoteCardProps {
   note: Note;
+  /** Lookup of tag name → assigned chip color (absent/null = default style). */
+  tagColors: Record<string, TagColor | null>;
   // Edit state
   editingId: string | null;
   editTitle: string;
@@ -91,6 +95,7 @@ function IconButton({
 
 export function NoteCard({
   note: n,
+  tagColors,
   editingId,
   editTitle,
   editBody,
@@ -251,9 +256,7 @@ export function NoteCard({
       {n.tags.length > 0 && (
         <div className={styles.tagList} aria-label="Tags">
           {n.tags.map((tag) => (
-            <span key={tag} data-tag={tag} className={styles.tag}>
-              {tag}
-            </span>
+            <TagChip key={tag} tag={tag} color={tagColors[tag] ?? null} />
           ))}
         </div>
       )}

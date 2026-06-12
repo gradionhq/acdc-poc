@@ -174,6 +174,127 @@ describe('POST /api/tags/rename', () => {
   });
 });
 
+describe('GET /api/tags — colors', () => {
+  it('returns color: null for tags without an assigned color', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'a', body: 'b', tags: ['plain'] })
+      .expect(201);
+
+    const res = await request(app).get('/api/tags').expect(200);
+    const entry = (res.body as Array<{ tag: string; color: string | null }>).find(
+      (t) => t.tag === 'plain',
+    );
+    expect(entry?.color).toBeNull();
+  });
+
+  it('reflects an assigned color in the listing', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'a', body: 'b', tags: ['urgent'] })
+      .expect(201);
+    await request(app).put('/api/tags/urgent').send({ color: 'red' }).expect(200);
+
+    const res = await request(app).get('/api/tags').expect(200);
+    const entry = (res.body as Array<{ tag: string; color: string | null }>).find(
+      (t) => t.tag === 'urgent',
+    );
+    expect(entry?.color).toBe('red');
+  });
+});
+
+describe('PUT /api/tags/:name', () => {
+  it('sets a valid color and echoes it back', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    const res = await request(app).put('/api/tags/work').send({ color: 'blue' }).expect(200);
+    expect(res.body).toMatchObject({ tag: 'work', color: 'blue' });
+    expect(store.getTagColor('work')).toBe('blue');
+  });
+
+  it('accepts every color in the palette', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    for (const color of ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray']) {
+      await request(app).put(`/api/tags/c-${color}`).send({ color }).expect(200);
+    }
+  });
+
+  it('overwrites a previously assigned color', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    await request(app).put('/api/tags/work').send({ color: 'blue' }).expect(200);
+    await request(app).put('/api/tags/work').send({ color: 'green' }).expect(200);
+    expect(store.getTagColor('work')).toBe('green');
+  });
+
+  it('returns 400 for an unknown color', async () => {
+    const app = createApp();
+    const res = await request(app).put('/api/tags/work').send({ color: 'chartreuse' }).expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when color is missing', async () => {
+    const app = createApp();
+    const res = await request(app).put('/api/tags/work').send({}).expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when color is not a string', async () => {
+    const app = createApp();
+    const res = await request(app).put('/api/tags/work').send({ color: 123 }).expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when "none" is used (not part of the tag palette)', async () => {
+    const app = createApp();
+    await request(app).put('/api/tags/work').send({ color: 'none' }).expect(400);
+  });
+
+  it('returns 400 when the tag name exceeds 100 characters', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .put(`/api/tags/${'a'.repeat(101)}`)
+      .send({ color: 'red' })
+      .expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when the tag name contains a comma', async () => {
+    const app = createApp();
+    await request(app).put('/api/tags/a%2Cb').send({ color: 'red' }).expect(400);
+  });
+
+  it('carries the color across a rename', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'a', body: 'b', tags: ['old'] })
+      .expect(201);
+    await request(app).put('/api/tags/old').send({ color: 'purple' }).expect(200);
+    await request(app).post('/api/tags/rename').send({ from: 'old', to: 'new' }).expect(200);
+    expect(store.getTagColor('old')).toBeUndefined();
+    expect(store.getTagColor('new')).toBe('purple');
+  });
+
+  it('drops the color when the tag is deleted', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'a', body: 'b', tags: ['gone'] })
+      .expect(201);
+    await request(app).put('/api/tags/gone').send({ color: 'orange' }).expect(200);
+    await request(app).delete('/api/tags/gone').expect(200);
+    expect(store.getTagColor('gone')).toBeUndefined();
+  });
+});
+
 describe('DELETE /api/tags/:tag', () => {
   it('removes a tag from all notes', async () => {
     const store = new NoteStore();

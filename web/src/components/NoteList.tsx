@@ -17,6 +17,7 @@ export type NoteListProps = Omit<NoteCardProps, 'note'> & {
 
 export function NoteList({
   notes,
+  tagColors,
   initialLoading,
   isFilterActive,
   showEmptyState,
@@ -93,6 +94,7 @@ export function NoteList({
             <NoteCard
               key={n.id}
               note={n}
+              tagColors={tagColors}
               editingId={editingId}
               editTitle={editTitle}
               editBody={editBody}

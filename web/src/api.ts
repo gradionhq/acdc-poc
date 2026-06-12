@@ -213,15 +213,29 @@ export async function deleteAttachment(noteId: string, filename: string): Promis
 
 // ── Tag management ────────────────────────────────────────────────────────────
 
+/** Fixed palette of colors a tag chip may carry (independent of note colors). */
+export const TAG_COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'] as const;
+export type TagColor = (typeof TAG_COLORS)[number];
+
+function isTagColor(value: unknown): value is TagColor {
+  return typeof value === 'string' && (TAG_COLORS as readonly string[]).includes(value);
+}
+
 export interface TagStat {
   tag: string;
   count: number;
+  /** Assigned chip color, or null when the tag uses the default style. */
+  color: TagColor | null;
 }
 
 function isTagStat(value: unknown): value is TagStat {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
-  return typeof v.tag === 'string' && typeof v.count === 'number';
+  return (
+    typeof v.tag === 'string' &&
+    typeof v.count === 'number' &&
+    (v.color === null || isTagColor(v.color))
+  );
 }
 
 const tagsBase = '/api/tags';
@@ -247,6 +261,20 @@ export async function renameTag(from: string, to: string): Promise<{ affected: n
     throw new Error(payload.error ?? 'failed to rename tag');
   }
   return (await res.json()) as { affected: number };
+}
+
+export async function setTagColor(tag: string, color: TagColor): Promise<TagStat> {
+  const res = await fetch(`${tagsBase}/${encodeURIComponent(tag)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ color }),
+  });
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to set tag color');
+  }
+  const data = (await res.json()) as { tag: string; color: TagColor };
+  return { tag: data.tag, count: 0, color: data.color };
 }
 
 export async function deleteTag(tag: string): Promise<{ affected: number }> {

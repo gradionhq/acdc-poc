@@ -500,6 +500,52 @@ describe('NoteStore — reset()', () => {
   });
 });
 
+describe('NoteStore — tag colors', () => {
+  it('returns undefined for a tag with no assigned color', () => {
+    const store = new NoteStore();
+    expect(store.getTagColor('x')).toBeUndefined();
+  });
+
+  it('stores and retrieves a tag color independent of any note', () => {
+    const store = new NoteStore();
+    store.setTagColor('work', 'blue');
+    expect(store.getTagColor('work')).toBe('blue');
+  });
+
+  it('listTags exposes color (null when unset)', () => {
+    const store = new NoteStore();
+    store.create({ title: 'a', body: 'A', tags: ['plain', 'fancy'] });
+    store.setTagColor('fancy', 'green');
+    const byTag = Object.fromEntries(store.listTags().map((t) => [t.tag, t.color]));
+    expect(byTag['plain']).toBeNull();
+    expect(byTag['fancy']).toBe('green');
+  });
+
+  it('reset clears stored tag colors', () => {
+    const store = new NoteStore();
+    store.setTagColor('work', 'red');
+    store.reset();
+    expect(store.getTagColor('work')).toBeUndefined();
+  });
+
+  it('rename moves the color to the new name', () => {
+    const store = new NoteStore();
+    store.create({ title: 'a', body: 'A', tags: ['old'] });
+    store.setTagColor('old', 'purple');
+    store.renameTag('old', 'new');
+    expect(store.getTagColor('old')).toBeUndefined();
+    expect(store.getTagColor('new')).toBe('purple');
+  });
+
+  it('delete removes the stored color', () => {
+    const store = new NoteStore();
+    store.create({ title: 'a', body: 'A', tags: ['gone'] });
+    store.setTagColor('gone', 'orange');
+    store.deleteTag('gone');
+    expect(store.getTagColor('gone')).toBeUndefined();
+  });
+});
+
 describe('NoteStore — multi-tag filter', () => {
   it('filters with OR mode returns notes that have any of the given tags', () => {
     const store = new NoteStore();

@@ -15,6 +15,7 @@ function makeProps(overrides: Partial<NoteCardProps> = {}): NoteCardProps {
       archived: false,
       color: 'none' as NoteColor,
     },
+    tagColors: {},
     editingId: null,
     editTitle: '',
     editBody: '',

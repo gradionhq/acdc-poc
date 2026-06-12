@@ -114,6 +114,45 @@ describe('FilterBar', () => {
     expect(screen.getByRole('combobox', { name: /sort notes/i })).toHaveValue('title');
   });
 
+  it('does not render the tag chip row when no tags are provided', () => {
+    renderFilterBar();
+    expect(screen.queryByLabelText(/filter by tag chips/i)).not.toBeInTheDocument();
+  });
+
+  it('renders a clickable chip per tag in its color', () => {
+    renderFilterBar({
+      tags: [
+        { tag: 'work', count: 2, color: 'blue' },
+        { tag: 'home', count: 1, color: null },
+      ],
+    });
+    const workChip = screen.getByRole('button', { name: /filter by tag work/i });
+    expect(workChip).toBeInTheDocument();
+    expect(workChip.querySelector('[data-tag-color="blue"]')).not.toBeNull();
+    const homeChip = screen.getByRole('button', { name: /filter by tag home/i });
+    expect(homeChip.querySelector('[data-tag-color="none"]')).not.toBeNull();
+  });
+
+  it('clicking a tag chip sets that tag as the filter', async () => {
+    const onTagFilterChange = vi.fn();
+    renderFilterBar({ tags: [{ tag: 'work', count: 2, color: 'blue' }], onTagFilterChange });
+    await userEvent.click(screen.getByRole('button', { name: /filter by tag work/i }));
+    expect(onTagFilterChange).toHaveBeenCalledWith('work');
+  });
+
+  it('clicking the active tag chip clears the filter', async () => {
+    const onTagFilterChange = vi.fn();
+    renderFilterBar({
+      tags: [{ tag: 'work', count: 2, color: 'blue' }],
+      tagFilter: 'work',
+      onTagFilterChange,
+    });
+    const chip = screen.getByRole('button', { name: /filter by tag work/i });
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(chip);
+    expect(onTagFilterChange).toHaveBeenCalledWith('');
+  });
+
   it('renders the tag mode toggle button with "Match ANY" label when tagMode is or', () => {
     renderFilterBar({ tagMode: 'or' });
     expect(screen.getByRole('button', { name: /match any/i })).toBeInTheDocument();
