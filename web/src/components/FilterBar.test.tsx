@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import { FilterBar } from './FilterBar';
-import type { SortOrder } from '../api';
+import type { SortOrder, TagMode } from '../api';
 
 function renderFilterBar(overrides: Partial<Parameters<typeof FilterBar>[0]> = {}) {
   const ref = createRef<HTMLInputElement>();
@@ -12,6 +12,8 @@ function renderFilterBar(overrides: Partial<Parameters<typeof FilterBar>[0]> = {
     onSearchChange: vi.fn(),
     tagFilter: '',
     onTagFilterChange: vi.fn(),
+    tagMode: 'or' as TagMode,
+    onTagModeChange: vi.fn(),
     sort: 'newest' as SortOrder,
     onSortChange: vi.fn(),
     showArchived: false,
@@ -149,5 +151,45 @@ describe('FilterBar', () => {
     expect(chip).toHaveAttribute('aria-pressed', 'true');
     await userEvent.click(chip);
     expect(onTagFilterChange).toHaveBeenCalledWith('');
+  });
+
+  it('renders the tag mode toggle button with "Match ANY" label when tagMode is or', () => {
+    renderFilterBar({ tagMode: 'or' });
+    expect(screen.getByRole('button', { name: /match any/i })).toBeInTheDocument();
+  });
+
+  it('renders the tag mode toggle button with "Match ALL" label when tagMode is and', () => {
+    renderFilterBar({ tagMode: 'and' });
+    expect(screen.getByRole('button', { name: /match all/i })).toBeInTheDocument();
+  });
+
+  it('calls onTagModeChange with "and" when toggle is clicked and current mode is or', async () => {
+    const onTagModeChange = vi.fn();
+    renderFilterBar({ tagMode: 'or', onTagModeChange });
+    await userEvent.click(screen.getByRole('button', { name: /match any/i }));
+    expect(onTagModeChange).toHaveBeenCalledWith('and');
+  });
+
+  it('calls onTagModeChange with "or" when toggle is clicked and current mode is and', async () => {
+    const onTagModeChange = vi.fn();
+    renderFilterBar({ tagMode: 'and', onTagModeChange });
+    await userEvent.click(screen.getByRole('button', { name: /match all/i }));
+    expect(onTagModeChange).toHaveBeenCalledWith('or');
+  });
+
+  it('tag mode toggle has aria-pressed=true when tagMode is and', () => {
+    renderFilterBar({ tagMode: 'and' });
+    expect(screen.getByRole('button', { name: /match all/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('tag mode toggle has aria-pressed=false when tagMode is or', () => {
+    renderFilterBar({ tagMode: 'or' });
+    expect(screen.getByRole('button', { name: /match any/i })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
   });
 });

@@ -705,3 +705,98 @@ describe('POST /api/test/reset — guarded reset endpoint', () => {
     await request(app).post('/api/test/reset').expect(404);
   });
 });
+
+describe('notes API — multi-tag filter', () => {
+  it('filters notes by multiple tags with OR mode (default)', async () => {
+    const app = createApp();
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'work note', body: 'b', tags: ['work'] })
+      .expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'personal note', body: 'b', tags: ['personal'] })
+      .expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'other note', body: 'b', tags: ['other'] })
+      .expect(201);
+
+    const res = await request(app).get('/api/notes?tags=work,personal').expect(200);
+    expect(res.headers['x-total-count']).toBe('2');
+    const titles = (res.body as Array<{ title: string }>).map((n) => n.title);
+    expect(titles).toContain('work note');
+    expect(titles).toContain('personal note');
+  });
+
+  it('filters notes by multiple tags with AND mode', async () => {
+    const app = createApp();
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'both tags', body: 'b', tags: ['work', 'urgent'] })
+      .expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'work only', body: 'b', tags: ['work'] })
+      .expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'urgent only', body: 'b', tags: ['urgent'] })
+      .expect(201);
+
+    const res = await request(app).get('/api/notes?tags=work,urgent&tagMode=and').expect(200);
+    expect(res.headers['x-total-count']).toBe('1');
+    expect((res.body as Array<{ title: string }>)[0].title).toBe('both tags');
+  });
+
+  it('returns all notes when tags param is empty', async () => {
+    const app = createApp();
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'a', body: 'b', tags: ['work'] })
+      .expect(201);
+    await request(app).post('/api/notes').send({ title: 'b', body: 'c' }).expect(201);
+
+    const res = await request(app).get('/api/notes?tags=').expect(200);
+    expect(res.headers['x-total-count']).toBe('2');
+  });
+
+  it('defaults tagMode to or when not provided', async () => {
+    const app = createApp();
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'work note', body: 'b', tags: ['work'] })
+      .expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'personal note', body: 'b', tags: ['personal'] })
+      .expect(201);
+
+    const res = await request(app).get('/api/notes?tags=work,personal').expect(200);
+    expect(res.headers['x-total-count']).toBe('2');
+  });
+
+  it('defaults tagMode to or when tagMode is invalid', async () => {
+    const app = createApp();
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'work note', body: 'b', tags: ['work'] })
+      .expect(201);
+
+    const res = await request(app).get('/api/notes?tags=work&tagMode=invalid').expect(200);
+    expect(res.headers['x-total-count']).toBe('1');
+  });
+
+  it('existing single ?tag= filter continues to work', async () => {
+    const app = createApp();
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'tagged', body: 'b', tags: ['work'] })
+      .expect(201);
+    await request(app).post('/api/notes').send({ title: 'untagged', body: 'b' }).expect(201);
+
+    const res = await request(app).get('/api/notes?tag=work').expect(200);
+    expect(res.headers['x-total-count']).toBe('1');
+    expect((res.body as Array<{ title: string }>)[0].title).toBe('tagged');
+  });
+});

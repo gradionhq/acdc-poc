@@ -141,3 +141,105 @@ describe('NoteCard overflow menu', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });
+
+describe('NoteCard attachment thumbnails', () => {
+  function makePropsWithAttachments(
+    attachmentList: { filename: string; contentType: string; size: number }[],
+  ): NoteCardProps {
+    return makeProps({
+      attachments: { '1': attachmentList },
+      attachmentsOpen: { '1': true },
+    });
+  }
+
+  it('renders an img thumbnail for an image/png attachment', () => {
+    render(
+      <ul>
+        <NoteCard
+          {...makePropsWithAttachments([
+            { filename: 'photo.png', contentType: 'image/png', size: 1234 },
+          ])}
+        />
+      </ul>,
+    );
+    const img = screen.getByRole('img', { name: /thumbnail for photo\.png/i });
+    expect(img).toBeInTheDocument();
+    expect(img).toHaveAttribute('loading', 'lazy');
+    expect(img).toHaveAttribute('src', expect.stringContaining('photo.png'));
+  });
+
+  it('renders an img thumbnail for an image/jpeg attachment', () => {
+    render(
+      <ul>
+        <NoteCard
+          {...makePropsWithAttachments([
+            { filename: 'shot.jpg', contentType: 'image/jpeg', size: 5678 },
+          ])}
+        />
+      </ul>,
+    );
+    expect(screen.getByRole('img', { name: /thumbnail for shot\.jpg/i })).toBeInTheDocument();
+  });
+
+  it('does not render a thumbnail for a non-image attachment', () => {
+    render(
+      <ul>
+        <NoteCard
+          {...makePropsWithAttachments([
+            { filename: 'doc.pdf', contentType: 'application/pdf', size: 999 },
+          ])}
+        />
+      </ul>,
+    );
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('does not render a thumbnail for text/plain attachment', () => {
+    render(
+      <ul>
+        <NoteCard
+          {...makePropsWithAttachments([
+            { filename: 'notes.txt', contentType: 'text/plain', size: 42 },
+          ])}
+        />
+      </ul>,
+    );
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('renders thumbnails only for image attachments in a mixed list', () => {
+    render(
+      <ul>
+        <NoteCard
+          {...makePropsWithAttachments([
+            { filename: 'img.png', contentType: 'image/png', size: 100 },
+            { filename: 'file.txt', contentType: 'text/plain', size: 50 },
+            { filename: 'pic.gif', contentType: 'image/gif', size: 200 },
+          ])}
+        />
+      </ul>,
+    );
+    // Only img.png and pic.gif should have thumbnails
+    const thumbnails = screen.getAllByRole('img');
+    expect(thumbnails).toHaveLength(2);
+    expect(screen.getByRole('img', { name: /thumbnail for img\.png/i })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /thumbnail for pic\.gif/i })).toBeInTheDocument();
+  });
+
+  it('thumbnail link href matches the download URL', () => {
+    render(
+      <ul>
+        <NoteCard
+          {...makePropsWithAttachments([
+            { filename: 'image.webp', contentType: 'image/webp', size: 300 },
+          ])}
+        />
+      </ul>,
+    );
+    const img = screen.getByRole('img', { name: /thumbnail for image\.webp/i });
+    const link = img.closest('a');
+    expect(link).toHaveAttribute('href', expect.stringContaining('image.webp'));
+    expect(link).toHaveAttribute('download', 'image.webp');
+    expect(link).toHaveAttribute('aria-label', 'Download thumbnail for image.webp');
+  });
+});

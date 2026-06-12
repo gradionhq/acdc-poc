@@ -191,25 +191,44 @@ function mockFetchSequence() {
         notes = notes.filter((n) => n.id !== id);
         return new Response(null, { status: 204 });
       }
-      // Parse page/pageSize/q/tag/sort/archived from URL
+      // Parse page/pageSize/q/tag/tags/tagMode/sort/archived from URL
       const urlObj = new URL(urlStr, 'http://localhost');
       const page = Number(urlObj.searchParams.get('page') ?? '1');
       const pageSize = Number(urlObj.searchParams.get('pageSize') ?? '5');
       const q = urlObj.searchParams.get('q') ?? '';
       const tagParam = urlObj.searchParams.get('tag') ?? '';
+      const tagsParam = urlObj.searchParams.get('tags') ?? '';
+      const tagModeParam = urlObj.searchParams.get('tagMode') ?? 'or';
       const sortParam = urlObj.searchParams.get('sort') ?? 'newest';
       const archivedParam = urlObj.searchParams.get('archived') === 'true';
       const term = q.trim().toLowerCase();
       const tagTerm = tagParam.trim().toLowerCase();
+      const multiTags = tagsParam
+        ? tagsParam
+            .split(',')
+            .map((t) => t.trim().toLowerCase())
+            .filter((t) => t !== '')
+        : [];
       const filtered = notes
-        .filter(
-          (n) =>
-            n.archived === archivedParam &&
-            (term === '' ||
-              n.title.toLowerCase().includes(term) ||
-              n.body.toLowerCase().includes(term)) &&
-            (tagTerm === '' || n.tags.some((t) => t.toLowerCase() === tagTerm)),
-        )
+        .filter((n) => {
+          if (n.archived !== archivedParam) return false;
+          if (
+            term !== '' &&
+            !n.title.toLowerCase().includes(term) &&
+            !n.body.toLowerCase().includes(term)
+          )
+            return false;
+          if (tagTerm !== '' && !n.tags.some((t) => t.toLowerCase() === tagTerm)) return false;
+          if (multiTags.length > 0) {
+            const noteLower = n.tags.map((t) => t.toLowerCase());
+            if (tagModeParam === 'and') {
+              if (!multiTags.every((mt) => noteLower.includes(mt))) return false;
+            } else {
+              if (!multiTags.some((mt) => noteLower.includes(mt))) return false;
+            }
+          }
+          return true;
+        })
         .sort((a, b) => {
           if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
           if (sortParam === 'oldest') return Number(a.id) - Number(b.id);

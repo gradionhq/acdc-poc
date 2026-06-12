@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { Search, Tag, ArrowUpDown, Archive } from 'lucide-react';
-import type { SortOrder, TagStat } from '../api';
+import type { SortOrder, TagMode, TagStat } from '../api';
 import { TagChip } from './TagChip';
 import styles from './FilterBar.module.css';
 
@@ -9,6 +9,8 @@ export interface FilterBarProps {
   onSearchChange: (value: string) => void;
   tagFilter: string;
   onTagFilterChange: (value: string) => void;
+  tagMode: TagMode;
+  onTagModeChange: (mode: TagMode) => void;
   sort: SortOrder;
   onSortChange: (sort: SortOrder) => void;
   showArchived: boolean;
@@ -23,6 +25,8 @@ export function FilterBar({
   onSearchChange,
   tagFilter,
   onTagFilterChange,
+  tagMode,
+  onTagModeChange,
   sort,
   onSortChange,
   showArchived,
@@ -30,6 +34,7 @@ export function FilterBar({
   searchInputRef,
   tags = [],
 }: FilterBarProps) {
+  const isAndMode = tagMode === 'and';
   return (
     <div className={styles.filterBar} role="search" aria-label="Filter and sort notes">
       {/* Search */}
@@ -56,12 +61,25 @@ export function FilterBar({
           <input
             className={styles.inputWithIcon}
             aria-label="Filter by tag"
-            placeholder="Filter by tag…"
+            placeholder="tag1, tag2…"
             value={tagFilter}
             onChange={(e) => onTagFilterChange(e.target.value)}
           />
         </div>
       </label>
+
+      {/* Tag mode toggle */}
+      <div className={styles.fieldToggle}>
+        <button
+          type="button"
+          className={`${styles.toggleBtn} ${isAndMode ? styles.toggleBtnActive : ''}`}
+          aria-label={isAndMode ? 'Match ALL tags' : 'Match ANY tag'}
+          aria-pressed={isAndMode}
+          onClick={() => onTagModeChange(isAndMode ? 'or' : 'and')}
+        >
+          {isAndMode ? 'Match ALL' : 'Match ANY'}
+        </button>
+      </div>
 
       {/* Sort */}
       <label className={`${styles.fieldLabel} ${styles.fieldSort}`}>

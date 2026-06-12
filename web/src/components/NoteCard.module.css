@@ -259,6 +259,30 @@
   color: var(--color-text-muted);
 }
 
+/* ── Attachment list item ─────────────────────────────────────── */
+
+.attachmentItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Image thumbnail ──────────────────────────────────────────── */
+
+.attachmentThumbnailLink {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.attachmentThumbnail {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: var(--radius-base);
+  border: 1px solid var(--color-surface-border);
+}
+
 /* ── Inline edit form (shared field styles) ───────────────────── */
 
 .fieldGroup {
