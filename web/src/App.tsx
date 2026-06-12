@@ -39,6 +39,25 @@ import styles from './App.module.css';
 const PAGE_SIZE = 5;
 const SEARCH_DEBOUNCE_MS = 300;
 
+/**
+ * Given an already-sorted list of notes (in the exact order the server returns
+ * them for a given sort, including pinned-first ordering), return the 1-based
+ * page number on which the note with `id` appears for the given page size.
+ *
+ * Pure and synchronous: the page-index math is isolated here so it can be unit
+ * tested deterministically without any async/UI plumbing. Returns 1 as a safe
+ * fallback when the note is absent or `pageSize` is not positive.
+ */
+export function pageOfNoteById(
+  sortedNotes: readonly Pick<Note, 'id'>[],
+  id: string,
+  pageSize: number,
+): number {
+  if (pageSize <= 0) return 1;
+  const index = sortedNotes.findIndex((n) => n.id === id);
+  return index >= 0 ? Math.floor(index / pageSize) + 1 : 1;
+}
+
 /** Parse a comma-separated string into a trimmed, non-empty, deduplicated string array. */
 function parseTags(raw: string): string[] {
   return [
@@ -166,12 +185,10 @@ export function App() {
     // we never silently miss notes beyond an arbitrary ceiling.
     const first = await listNotes(1, PAGE_SIZE, '', '', s);
     if (first.total <= PAGE_SIZE) {
-      const i = first.notes.findIndex((n) => n.id === id);
-      return i >= 0 ? Math.floor(i / PAGE_SIZE) + 1 : 1;
+      return pageOfNoteById(first.notes, id, PAGE_SIZE);
     }
     const full = await listNotes(1, first.total, '', '', s);
-    const index = full.notes.findIndex((n) => n.id === id);
-    return index >= 0 ? Math.floor(index / PAGE_SIZE) + 1 : 1;
+    return pageOfNoteById(full.notes, id, PAGE_SIZE);
   }
 
   async function onSubmit(e: FormEvent) {
