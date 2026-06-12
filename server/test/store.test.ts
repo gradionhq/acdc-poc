@@ -500,6 +500,105 @@ describe('NoteStore — reset()', () => {
   });
 });
 
+describe('NoteStore — multi-tag filter', () => {
+  it('filters with OR mode returns notes that have any of the given tags', () => {
+    const store = new NoteStore();
+    store.create({ title: 'work only', body: 'b', tags: ['work'] });
+    store.create({ title: 'personal only', body: 'b', tags: ['personal'] });
+    store.create({ title: 'untagged', body: 'b' });
+
+    const result = store.list(
+      1,
+      10,
+      undefined,
+      undefined,
+      'newest',
+      false,
+      ['work', 'personal'],
+      'or',
+    );
+    expect(result.total).toBe(2);
+    const titles = result.items.map((n) => n.title);
+    expect(titles).toContain('work only');
+    expect(titles).toContain('personal only');
+  });
+
+  it('filters with AND mode returns only notes that have all of the given tags', () => {
+    const store = new NoteStore();
+    store.create({ title: 'both tags', body: 'b', tags: ['work', 'urgent'] });
+    store.create({ title: 'work only', body: 'b', tags: ['work'] });
+    store.create({ title: 'urgent only', body: 'b', tags: ['urgent'] });
+
+    const result = store.list(
+      1,
+      10,
+      undefined,
+      undefined,
+      'newest',
+      false,
+      ['work', 'urgent'],
+      'and',
+    );
+    expect(result.total).toBe(1);
+    expect(result.items[0].title).toBe('both tags');
+  });
+
+  it('returns all notes when tags array is empty', () => {
+    const store = new NoteStore();
+    store.create({ title: 'a', body: 'b', tags: ['work'] });
+    store.create({ title: 'b', body: 'c' });
+
+    const result = store.list(1, 10, undefined, undefined, 'newest', false, [], 'and');
+    expect(result.total).toBe(2);
+  });
+
+  it('multi-tag OR filter is case-insensitive', () => {
+    const store = new NoteStore();
+    store.create({ title: 'titled', body: 'b', tags: ['WORK'] });
+
+    const result = store.list(1, 10, undefined, undefined, 'newest', false, ['work'], 'or');
+    expect(result.total).toBe(1);
+  });
+
+  it('multi-tag AND filter is case-insensitive', () => {
+    const store = new NoteStore();
+    store.create({ title: 'titled', body: 'b', tags: ['WORK', 'URGENT'] });
+
+    const result = store.list(
+      1,
+      10,
+      undefined,
+      undefined,
+      'newest',
+      false,
+      ['work', 'urgent'],
+      'and',
+    );
+    expect(result.total).toBe(1);
+  });
+
+  it('multi-tag filter combines with query filter', () => {
+    const store = new NoteStore();
+    store.create({ title: 'match work', body: 'b', tags: ['work'] });
+    store.create({ title: 'match personal', body: 'b', tags: ['personal'] });
+    store.create({ title: 'other work note', body: 'b', tags: ['work'] });
+
+    const result = store.list(1, 10, 'match', undefined, 'newest', false, ['work'], 'or');
+    expect(result.total).toBe(1);
+    expect(result.items[0].title).toBe('match work');
+  });
+
+  it('single-tag legacy filter still works when tags array is undefined', () => {
+    const store = new NoteStore();
+    store.create({ title: 'work note', body: 'b', tags: ['work'] });
+    store.create({ title: 'other note', body: 'b', tags: ['other'] });
+
+    const result = store.list(1, 10, undefined, 'work');
+    expect(result.total).toBe(1);
+    expect(result.items[0].title).toBe('work note');
+  });
+});
+
 describe('NoteStore — attachment security', () => {
   it('strips double-quotes from filenames so Content-Disposition is safe', () => {
     const store = new NoteStore();

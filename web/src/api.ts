@@ -36,6 +36,7 @@ export interface NotesPage {
 }
 
 export type SortOrder = 'newest' | 'oldest' | 'title';
+export type TagMode = 'and' | 'or';
 
 const base = '/api/notes';
 
@@ -46,6 +47,8 @@ export async function listNotes(
   tag?: string,
   sort: SortOrder = 'newest',
   archived = false,
+  tags: string[] = [],
+  tagMode: TagMode = 'or',
 ): Promise<NotesPage> {
   const params = new URLSearchParams({
     page: String(page),
@@ -60,6 +63,12 @@ export async function listNotes(
   }
   if (archived) {
     params.set('archived', 'true');
+  }
+  if (tags.length > 0) {
+    params.set('tags', tags.join(','));
+    if (tagMode === 'and') {
+      params.set('tagMode', 'and');
+    }
   }
   const res = await fetch(`${base}?${params.toString()}`);
   if (!res.ok) throw new Error('failed to load notes');

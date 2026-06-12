@@ -38,6 +38,9 @@ export interface ListResult {
 /** Valid values for the sort query parameter. */
 export type SortOrder = 'newest' | 'oldest' | 'title';
 
+/** Valid values for the tagMode query parameter. */
+export type TagMode = 'and' | 'or';
+
 export class NoteStore {
   private readonly notes = new Map<string, Note>();
   /**
@@ -288,9 +291,13 @@ export class NoteStore {
     tag?: string,
     sort: SortOrder = 'newest',
     archived = false,
+    tags?: string[],
+    tagMode: TagMode = 'or',
   ): ListResult {
     const term = query ? query.trim().toLowerCase() : '';
     const tagFilter = tag ? tag.trim().toLowerCase() : '';
+    // Normalise the multi-tag list to lowercase; empty array = no filter.
+    const multiTags = (tags ?? []).map((t) => t.toLowerCase()).filter((t) => t !== '');
     const all = [...this.notes.values()]
       .sort((a, b) => {
         // Pinned notes always sort before unpinned regardless of secondary sort.
@@ -301,14 +308,27 @@ export class NoteStore {
         // 'newest' (default): most recently created first
         return b.createdAt - a.createdAt;
       })
-      .filter(
-        (n) =>
-          n.archived === archived &&
-          (term === '' ||
-            n.title.toLowerCase().includes(term) ||
-            n.body.toLowerCase().includes(term)) &&
-          (tagFilter === '' || n.tags.some((t) => t.toLowerCase() === tagFilter)),
-      );
+      .filter((n) => {
+        if (n.archived !== archived) return false;
+        if (
+          term !== '' &&
+          !n.title.toLowerCase().includes(term) &&
+          !n.body.toLowerCase().includes(term)
+        )
+          return false;
+        // Legacy single-tag filter (backward-compatible).
+        if (tagFilter !== '' && !n.tags.some((t) => t.toLowerCase() === tagFilter)) return false;
+        // Multi-tag filter.
+        if (multiTags.length > 0) {
+          const noteLower = n.tags.map((t) => t.toLowerCase());
+          if (tagMode === 'and') {
+            if (!multiTags.every((mt) => noteLower.includes(mt))) return false;
+          } else {
+            if (!multiTags.some((mt) => noteLower.includes(mt))) return false;
+          }
+        }
+        return true;
+      });
     const start = (page - 1) * pageSize;
     return { items: all.slice(start, start + pageSize), total: all.length };
   }

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
-import { NOTE_COLORS, NoteStore, type NoteColor, type SortOrder } from './store.js';
+import { NOTE_COLORS, NoteStore, type NoteColor, type SortOrder, type TagMode } from './store.js';
 
 const VALID_SORT_VALUES: readonly SortOrder[] = ['newest', 'oldest', 'title'];
 
@@ -122,7 +122,19 @@ export function createNotesRouter(store: NoteStore): Router {
       return;
     }
     const archived = archivedParam === 'true';
-    const result = store.list(page, pageSize, q, tag, sort, archived);
+    // Multi-tag filter: ?tags=a,b (comma-separated string) — missing or empty → no filter.
+    const tagsParam = req.query.tags;
+    const tags =
+      typeof tagsParam === 'string' && tagsParam.trim() !== ''
+        ? tagsParam
+            .split(',')
+            .map((t) => t.trim())
+            .filter((t) => t !== '')
+        : [];
+    // tagMode: 'and' | 'or' — missing or invalid defaults to 'or'.
+    const tagModeParam = req.query.tagMode;
+    const tagMode: TagMode = tagModeParam === 'and' || tagModeParam === 'or' ? tagModeParam : 'or';
+    const result = store.list(page, pageSize, q, tag, sort, archived, tags, tagMode);
     res.set('X-Total-Count', String(result.total));
     res.json(result.items);
   });

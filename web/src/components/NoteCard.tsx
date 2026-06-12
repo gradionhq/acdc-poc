@@ -382,25 +382,44 @@ export function NoteCard({
             <p className={styles.attachmentEmpty}>No attachments yet.</p>
           ) : (
             <ul className={styles.attachmentList} aria-label={`Attachment list for ${n.title}`}>
-              {(attachments[n.id] ?? []).map((att) => (
-                <li key={att.filename}>
-                  <a
-                    href={attachmentDownloadUrl(n.id, att.filename)}
-                    download={att.filename}
-                    aria-label={`Download ${att.filename}`}
-                  >
-                    {att.filename}
-                  </a>{' '}
-                  ({att.size} bytes)
-                  <Button
-                    variant="danger"
-                    aria-label={`Delete attachment ${att.filename}`}
-                    onClick={() => void onDeleteAttachment(n.id, att.filename)}
-                  >
-                    Delete
-                  </Button>
-                </li>
-              ))}
+              {(attachments[n.id] ?? []).map((att) => {
+                const isImage = att.contentType.startsWith('image/');
+                const downloadUrl = attachmentDownloadUrl(n.id, att.filename);
+                return (
+                  <li key={att.filename} className={styles.attachmentItem}>
+                    {isImage && (
+                      <a
+                        href={downloadUrl}
+                        download={att.filename}
+                        aria-label={`Download thumbnail for ${att.filename}`}
+                        className={styles.attachmentThumbnailLink}
+                      >
+                        <img
+                          src={downloadUrl}
+                          alt={`Thumbnail for ${att.filename}`}
+                          loading="lazy"
+                          className={styles.attachmentThumbnail}
+                        />
+                      </a>
+                    )}
+                    <a
+                      href={downloadUrl}
+                      download={att.filename}
+                      aria-label={`Download ${att.filename}`}
+                    >
+                      {att.filename}
+                    </a>{' '}
+                    ({att.size} bytes)
+                    <Button
+                      variant="danger"
+                      aria-label={`Delete attachment ${att.filename}`}
+                      onClick={() => void onDeleteAttachment(n.id, att.filename)}
+                    >
+                      Delete
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
