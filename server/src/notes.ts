@@ -158,6 +158,13 @@ export function createNotesRouter(store: NoteStore): Router {
     );
   });
 
+  // --- Trash endpoints (must be registered before /:id to avoid path conflicts) ---
+
+  /** List all trashed notes, sorted by most-recently trashed first. */
+  router.get('/trash', (_req: Request, res: Response) => {
+    res.json(store.listTrashed());
+  });
+
   router.get('/:id', (req: Request, res: Response) => {
     const note = store.get(req.params.id);
     if (!note) {
@@ -228,7 +235,28 @@ export function createNotesRouter(store: NoteStore): Router {
   });
 
   router.delete('/:id', (req: Request, res: Response) => {
-    if (!store.delete(req.params.id)) {
+    // Soft-delete: move the note to trash instead of removing it permanently.
+    const note = store.trash(req.params.id);
+    if (!note) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    res.status(204).end();
+  });
+
+  /** Restore a trashed note back to the active list. */
+  router.patch('/:id/restore', (req: Request, res: Response) => {
+    const note = store.restore(req.params.id);
+    if (!note) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    res.json(note);
+  });
+
+  /** Permanently delete a note from the store (irreversible). */
+  router.delete('/:id/permanent', (req: Request, res: Response) => {
+    if (!store.permanentDelete(req.params.id)) {
       res.status(404).json({ error: 'not found' });
       return;
     }

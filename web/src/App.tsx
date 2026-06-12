@@ -14,6 +14,9 @@ import {
   duplicateNote,
   listAttachments,
   listNotes,
+  listTrashedNotes,
+  permanentDeleteNote,
+  restoreNote,
   toggleArchive,
   togglePin,
   updateNote,
@@ -72,6 +75,8 @@ export function App() {
   const [query, setQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashedNotes, setTrashedNotes] = useState<Note[]>([]);
   const [sort, setSort] = useState<SortOrder>('newest');
   /** noteId → list of attachment metadata (loaded lazily on expand). */
   const [attachments, setAttachments] = useState<Record<string, AttachmentMeta[]>>({});
@@ -97,6 +102,13 @@ export function App() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   /** Ref to the delete button that triggered the dialog; focus returns here on close. */
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
+  /**
+   * When non-null, the permanent-delete confirm dialog is open and this holds
+   * the id of the trashed note pending permanent deletion.
+   */
+  const [pendingPermanentDeleteId, setPendingPermanentDeleteId] = useState<string | null>(null);
+  /** Ref to the permanent-delete button that triggered its dialog. */
+  const permanentDeleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   /** noteId → true while a drag is active over that note's dropzone. */
   const [dragOver, setDragOver] = useState<Record<string, boolean>>({});
 
@@ -131,10 +143,27 @@ export function App() {
     }
   }
 
+  async function refreshTrash() {
+    try {
+      const trashed = await listTrashedNotes();
+      setTrashedNotes(trashed);
+      setError(null);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'An unexpected error occurred';
+      setError(msg);
+    } finally {
+      setInitialLoading(false);
+    }
+  }
+
   useEffect(() => {
-    void refresh(page, query, tagFilter, sort, showArchived);
+    if (showTrash) {
+      void refreshTrash();
+    } else {
+      void refresh(page, query, tagFilter, sort, showArchived);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, query, tagFilter, sort, showArchived]);
+  }, [page, query, tagFilter, sort, showArchived, showTrash]);
 
   // Debounce search input: update `query` after SEARCH_DEBOUNCE_MS of inactivity.
   // Reset to page 1 whenever the query changes so results are always from the start.
@@ -378,7 +407,7 @@ export function App() {
     deleteTriggerRef.current = null;
   }
 
-  /** Performs the actual deletion after the user confirmed. */
+  /** Performs the soft-delete (trash) after the user confirmed. */
   async function onDeleteConfirm() {
     if (!pendingDeleteId) return;
     const id = pendingDeleteId;
@@ -388,8 +417,8 @@ export function App() {
     try {
       await deleteNote(id);
       setError(null);
-      addToast('Note deleted', 'success');
-      // After deletion the current page may become empty; go back one if needed
+      addToast('Note moved to trash', 'success');
+      // After trashing the current page may become empty; go back one if needed
       const newTotal = total - 1;
       const newTotalPages = Math.max(1, Math.ceil(newTotal / PAGE_SIZE));
       const newPage = Math.min(page, newTotalPages);
@@ -399,7 +428,51 @@ export function App() {
         setPage(newPage);
       }
     } catch (e: unknown) {
-      addToast('Failed to delete note', 'error');
+      addToast('Failed to move note to trash', 'error');
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
+    }
+  }
+
+  /** Restore a trashed note back to the active list. */
+  async function onRestore(id: string) {
+    try {
+      await restoreNote(id);
+      setError(null);
+      addToast('Note restored', 'success');
+      await refreshTrash();
+    } catch (e: unknown) {
+      addToast('Failed to restore note', 'error');
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
+    }
+  }
+
+  /** Opens the confirm dialog for permanently deleting a trashed note. */
+  function onPermanentDeleteRequest(id: string, triggerEl: HTMLButtonElement) {
+    permanentDeleteTriggerRef.current = triggerEl;
+    setPendingPermanentDeleteId(id);
+  }
+
+  /** Cancels the permanent-delete confirm dialog. */
+  function onPermanentDeleteCancel() {
+    setPendingPermanentDeleteId(null);
+    permanentDeleteTriggerRef.current?.focus();
+    permanentDeleteTriggerRef.current = null;
+  }
+
+  /** Permanently removes a trashed note after the user confirmed. */
+  async function onPermanentDeleteConfirm() {
+    if (!pendingPermanentDeleteId) return;
+    const id = pendingPermanentDeleteId;
+    setPendingPermanentDeleteId(null);
+    permanentDeleteTriggerRef.current?.focus();
+    permanentDeleteTriggerRef.current = null;
+    try {
+      await permanentDeleteNote(id);
+      setError(null);
+      addToast('Note permanently deleted', 'success');
+      await refreshTrash();
+    } catch (e: unknown) {
+      addToast('Failed to permanently delete note', 'error');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
@@ -490,7 +563,8 @@ export function App() {
   // True when there are no notes to show AND no filter is active — i.e. the
   // store is genuinely empty (not just "no results for this search").
   const isFilterActive = query !== '' || tagFilter !== '';
-  const showEmptyState = !initialLoading && !error && notes.length === 0;
+  const displayedNotes = showTrash ? trashedNotes : notes;
+  const showEmptyState = !initialLoading && !error && displayedNotes.length === 0;
 
   return (
     <main className={styles.page}>
@@ -533,6 +607,13 @@ export function App() {
         onToggleArchived={() => {
           setPage(1);
           setShowArchived((v) => !v);
+          setShowTrash(false);
+        }}
+        showTrash={showTrash}
+        onToggleTrash={() => {
+          setShowTrash((v) => !v);
+          setShowArchived(false);
+          setPage(1);
         }}
         searchInputRef={searchInputRef}
       />
@@ -551,7 +632,7 @@ export function App() {
       />
 
       <NoteList
-        notes={notes}
+        notes={showTrash ? trashedNotes : notes}
         initialLoading={initialLoading}
         isFilterActive={isFilterActive}
         showEmptyState={showEmptyState}
@@ -571,6 +652,8 @@ export function App() {
         onToggleArchive={(id, archived) => void onToggleArchive(id, archived)}
         onDeleteRequest={onDeleteRequest}
         onDuplicate={(id) => void onDuplicate(id)}
+        onRestore={(id) => void onRestore(id)}
+        onPermanentDeleteRequest={onPermanentDeleteRequest}
         attachments={attachments}
         attachmentsOpen={attachmentsOpen}
         uploadError={uploadError}
@@ -594,11 +677,20 @@ export function App() {
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       {pendingDeleteId !== null && (
         <ConfirmDialog
-          title="Delete note"
-          message={`Delete "${notes.find((n) => n.id === pendingDeleteId)?.title ?? 'this note'}"? This cannot be undone.`}
+          title="Move to trash"
+          message={`Move "${notes.find((n) => n.id === pendingDeleteId)?.title ?? 'this note'}" to trash? You can restore it later.`}
           confirmLabel="Delete"
           onConfirm={() => void onDeleteConfirm()}
           onCancel={onDeleteCancel}
+        />
+      )}
+      {pendingPermanentDeleteId !== null && (
+        <ConfirmDialog
+          title="Permanently delete note"
+          message={`Permanently delete "${trashedNotes.find((n) => n.id === pendingPermanentDeleteId)?.title ?? 'this note'}"? This cannot be undone.`}
+          confirmLabel="Delete permanently"
+          onConfirm={() => void onPermanentDeleteConfirm()}
+          onCancel={onPermanentDeleteCancel}
         />
       )}
     </main>

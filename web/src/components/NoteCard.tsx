@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Copy,
   Trash2,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from './Button';
 import { NoteBody } from '../NoteBody';
@@ -42,6 +43,8 @@ export interface NoteCardProps {
   onToggleArchive: (id: string, archived: boolean) => void;
   onDeleteRequest: (id: string, trigger: HTMLButtonElement) => void;
   onDuplicate: (id: string) => void;
+  onRestore?: (id: string) => void;
+  onPermanentDeleteRequest?: (id: string, trigger: HTMLButtonElement) => void;
   // Attachments
   attachments: Record<string, AttachmentMeta[]>;
   attachmentsOpen: Record<string, boolean>;
@@ -107,6 +110,8 @@ export function NoteCard({
   onToggleArchive,
   onDeleteRequest,
   onDuplicate,
+  onRestore,
+  onPermanentDeleteRequest,
   attachments,
   attachmentsOpen,
   uploadError,
@@ -260,93 +265,114 @@ export function NoteCard({
 
       {/* ── Action toolbar ── */}
       <div className={styles.noteActions}>
-        {/* Primary icon actions (always visible, non-archived only where applicable) */}
-        {!n.archived && (
-          <IconButton
-            label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
-            onClick={() => onTogglePin(n.id, n.pinned)}
-          >
-            {n.pinned ? (
-              <PinOff size={16} aria-hidden="true" />
-            ) : (
-              <Pin size={16} aria-hidden="true" />
-            )}
-          </IconButton>
-        )}
-
-        {!n.archived && (
-          <IconButton label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
-            <Pencil size={16} aria-hidden="true" />
-          </IconButton>
-        )}
-
-        <IconButton
-          label={n.archived ? `Unarchive ${n.title}` : `Archive ${n.title}`}
-          onClick={() => onToggleArchive(n.id, n.archived)}
-        >
-          {n.archived ? (
-            <ArchiveRestore size={16} aria-hidden="true" />
-          ) : (
-            <Archive size={16} aria-hidden="true" />
-          )}
-        </IconButton>
-
-        {!n.archived && (
-          <IconButton
-            label={`Attachments for ${n.title}`}
-            onClick={() => onToggleAttachments(n.id)}
-          >
-            <Paperclip size={16} aria-hidden="true" />
-          </IconButton>
-        )}
-
-        {/* Overflow menu — duplicate + delete */}
-        <div className={styles.overflowWrapper}>
-          <IconButton
-            label="More actions"
-            buttonRef={overflowBtnRef}
-            onClick={() => setOverflowOpen((v) => !v)}
-            aria-haspopup="menu"
-            aria-expanded={overflowOpen}
-          >
-            <MoreHorizontal size={16} aria-hidden="true" />
-          </IconButton>
-
-          {overflowOpen && (
-            <div ref={menuRef} className={styles.overflowMenu} role="menu">
-              {!n.archived && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  aria-label={`Duplicate ${n.title}`}
-                  className={styles.menuItem}
-                  onClick={() => {
-                    closeOverflow();
-                    onDuplicate(n.id);
-                  }}
-                >
-                  <Copy size={14} aria-hidden="true" />
-                  Duplicate
-                </button>
-              )}
-              <button
-                type="button"
-                role="menuitem"
-                aria-label={`Delete ${n.title}`}
-                className={`${styles.menuItem} ${styles.menuItemDanger}`}
-                onClick={() => {
-                  closeOverflow();
-                  // Return focus to the overflow trigger so it can receive focus after
-                  // the dialog is dismissed (the menuitem is removed from DOM on close).
-                  onDeleteRequest(n.id, overflowBtnRef.current as HTMLButtonElement);
-                }}
+        {n.deletedAt !== null ? (
+          // ── Trash view: restore + permanent delete ──
+          <>
+            <IconButton label={`Restore ${n.title}`} onClick={() => onRestore?.(n.id)}>
+              <RotateCcw size={16} aria-hidden="true" />
+            </IconButton>
+            <IconButton
+              label={`Permanently delete ${n.title}`}
+              variant="danger"
+              onClick={(e) =>
+                onPermanentDeleteRequest?.(n.id, e.currentTarget as HTMLButtonElement)
+              }
+            >
+              <Trash2 size={16} aria-hidden="true" />
+            </IconButton>
+          </>
+        ) : (
+          // ── Normal view: all standard actions ──
+          <>
+            {/* Primary icon actions (always visible, non-archived only where applicable) */}
+            {!n.archived && (
+              <IconButton
+                label={n.pinned ? `Unpin ${n.title}` : `Pin ${n.title}`}
+                onClick={() => onTogglePin(n.id, n.pinned)}
               >
-                <Trash2 size={14} aria-hidden="true" />
-                Delete
-              </button>
+                {n.pinned ? (
+                  <PinOff size={16} aria-hidden="true" />
+                ) : (
+                  <Pin size={16} aria-hidden="true" />
+                )}
+              </IconButton>
+            )}
+
+            {!n.archived && (
+              <IconButton label={`Edit ${n.title}`} onClick={() => onEditStart(n)}>
+                <Pencil size={16} aria-hidden="true" />
+              </IconButton>
+            )}
+
+            <IconButton
+              label={n.archived ? `Unarchive ${n.title}` : `Archive ${n.title}`}
+              onClick={() => onToggleArchive(n.id, n.archived)}
+            >
+              {n.archived ? (
+                <ArchiveRestore size={16} aria-hidden="true" />
+              ) : (
+                <Archive size={16} aria-hidden="true" />
+              )}
+            </IconButton>
+
+            {!n.archived && (
+              <IconButton
+                label={`Attachments for ${n.title}`}
+                onClick={() => onToggleAttachments(n.id)}
+              >
+                <Paperclip size={16} aria-hidden="true" />
+              </IconButton>
+            )}
+
+            {/* Overflow menu — duplicate + delete */}
+            <div className={styles.overflowWrapper}>
+              <IconButton
+                label="More actions"
+                buttonRef={overflowBtnRef}
+                onClick={() => setOverflowOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={overflowOpen}
+              >
+                <MoreHorizontal size={16} aria-hidden="true" />
+              </IconButton>
+
+              {overflowOpen && (
+                <div ref={menuRef} className={styles.overflowMenu} role="menu">
+                  {!n.archived && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      aria-label={`Duplicate ${n.title}`}
+                      className={styles.menuItem}
+                      onClick={() => {
+                        closeOverflow();
+                        onDuplicate(n.id);
+                      }}
+                    >
+                      <Copy size={14} aria-hidden="true" />
+                      Duplicate
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-label={`Delete ${n.title}`}
+                    className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                    onClick={() => {
+                      closeOverflow();
+                      // Return focus to the overflow trigger so it can receive focus after
+                      // the dialog is dismissed (the menuitem is removed from DOM on close).
+                      onDeleteRequest(n.id, overflowBtnRef.current as HTMLButtonElement);
+                    }}
+                  >
+                    <Trash2 size={14} aria-hidden="true" />
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* ── Attachments panel ── */}

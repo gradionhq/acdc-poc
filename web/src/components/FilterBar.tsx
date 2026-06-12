@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { Search, Tag, ArrowUpDown, Archive } from 'lucide-react';
+import { Search, Tag, ArrowUpDown, Archive, Trash2 } from 'lucide-react';
 import type { SortOrder } from '../api';
 import styles from './FilterBar.module.css';
 
@@ -12,6 +12,8 @@ export interface FilterBarProps {
   onSortChange: (sort: SortOrder) => void;
   showArchived: boolean;
   onToggleArchived: () => void;
+  showTrash: boolean;
+  onToggleTrash: () => void;
   searchInputRef: RefObject<HTMLInputElement>;
 }
 
@@ -24,6 +26,8 @@ export function FilterBar({
   onSortChange,
   showArchived,
   onToggleArchived,
+  showTrash,
+  onToggleTrash,
   searchInputRef,
 }: FilterBarProps) {
   return (
@@ -88,6 +92,20 @@ export function FilterBar({
         >
           <Archive size={14} aria-hidden="true" />
           {showArchived ? 'Active notes' : 'Archived notes'}
+        </button>
+      </div>
+
+      {/* Trash toggle */}
+      <div className={styles.fieldToggle}>
+        <button
+          type="button"
+          className={`${styles.toggleBtn} ${showTrash ? styles.toggleBtnActive : ''}`}
+          aria-label={showTrash ? 'Show active notes' : 'Show trash'}
+          aria-pressed={showTrash}
+          onClick={onToggleTrash}
+        >
+          <Trash2 size={14} aria-hidden="true" />
+          {showTrash ? 'Active notes' : 'Trash'}
         </button>
       </div>
     </div>

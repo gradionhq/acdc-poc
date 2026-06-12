@@ -16,6 +16,8 @@ function renderFilterBar(overrides: Partial<Parameters<typeof FilterBar>[0]> = {
     onSortChange: vi.fn(),
     showArchived: false,
     onToggleArchived: vi.fn(),
+    showTrash: false,
+    onToggleTrash: vi.fn(),
     searchInputRef: ref,
     ...overrides,
   };

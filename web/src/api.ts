@@ -9,13 +9,14 @@ export interface Note {
   pinned: boolean;
   archived: boolean;
   color: NoteColor;
+  deletedAt: number | null;
 }
 
 function isNoteColor(value: unknown): value is NoteColor {
   return typeof value === 'string' && (NOTE_COLORS as readonly string[]).includes(value);
 }
 
-function isNote(value: unknown): value is Note {
+function isRawNote(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   return (
@@ -26,8 +27,25 @@ function isNote(value: unknown): value is Note {
     (v.tags as unknown[]).every((t) => typeof t === 'string') &&
     typeof v.pinned === 'boolean' &&
     typeof v.archived === 'boolean' &&
-    isNoteColor(v.color)
+    isNoteColor(v.color) &&
+    // deletedAt is null (active/restored), a positive integer (trashed), or
+    // absent on legacy payloads (treated as null for forward-compatibility).
+    (v.deletedAt === undefined || v.deletedAt === null || typeof v.deletedAt === 'number')
   );
+}
+
+/** Normalize a raw server payload into a typed Note, defaulting deletedAt to null. */
+function toNote(value: Record<string, unknown>): Note {
+  return {
+    id: value.id as string,
+    title: value.title as string,
+    body: value.body as string,
+    tags: value.tags as string[],
+    pinned: value.pinned as boolean,
+    archived: value.archived as boolean,
+    color: value.color as NoteColor,
+    deletedAt: typeof value.deletedAt === 'number' ? value.deletedAt : null,
+  };
 }
 
 export interface NotesPage {
@@ -65,7 +83,8 @@ export async function listNotes(
   if (!res.ok) throw new Error('failed to load notes');
   const raw = Number(res.headers.get('X-Total-Count'));
   const total = Number.isFinite(raw) && raw >= 0 ? raw : 0;
-  const notes = (await res.json()) as Note[];
+  const rawNotes = (await res.json()) as Record<string, unknown>[];
+  const notes = rawNotes.map(toNote);
   return { notes, total };
 }
 
@@ -82,8 +101,8 @@ export async function createNote(input: {
   });
   if (!res.ok) throw new Error('failed to create note');
   const created: unknown = await res.json();
-  if (!isNote(created)) throw new Error('invalid note payload');
-  return created;
+  if (!isRawNote(created)) throw new Error('invalid note payload');
+  return toNote(created);
 }
 
 export async function updateNote(
@@ -97,37 +116,67 @@ export async function updateNote(
   });
   if (!res.ok) throw new Error('failed to update note');
   const updated: unknown = await res.json();
-  if (!isNote(updated)) throw new Error('invalid note payload');
-  return updated;
+  if (!isRawNote(updated)) throw new Error('invalid note payload');
+  return toNote(updated);
 }
 
+/**
+ * Soft-delete: move a note to trash (sets deletedAt).
+ * The note is excluded from the default list but can be restored.
+ */
 export async function deleteNote(id: string): Promise<void> {
   const res = await fetch(`${base}/${id}`, { method: 'DELETE' });
   if (!res.ok && res.status !== 404) throw new Error('failed to delete note');
+}
+
+/** Restore a trashed note back to the active list. */
+export async function restoreNote(id: string): Promise<Note> {
+  const res = await fetch(`${base}/${id}/restore`, { method: 'PATCH' });
+  if (!res.ok) throw new Error('failed to restore note');
+  const updated: unknown = await res.json();
+  if (!isRawNote(updated)) throw new Error('invalid note payload');
+  return toNote(updated);
+}
+
+/** Permanently remove a note from the store (irreversible). */
+export async function permanentDeleteNote(id: string): Promise<void> {
+  const res = await fetch(`${base}/${id}/permanent`, { method: 'DELETE' });
+  if (!res.ok && res.status !== 404) throw new Error('failed to permanently delete note');
+}
+
+/** List all trashed notes, sorted by most-recently trashed first. */
+export async function listTrashedNotes(): Promise<Note[]> {
+  const res = await fetch(`${base}/trash`);
+  if (!res.ok) throw new Error('failed to load trash');
+  const data: unknown = await res.json();
+  if (!Array.isArray(data) || !data.every(isRawNote)) {
+    throw new Error('invalid trash payload');
+  }
+  return data.map(toNote);
 }
 
 export async function duplicateNote(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/duplicate`, { method: 'POST' });
   if (!res.ok) throw new Error('failed to duplicate note');
   const created: unknown = await res.json();
-  if (!isNote(created)) throw new Error('invalid note payload');
-  return created;
+  if (!isRawNote(created)) throw new Error('invalid note payload');
+  return toNote(created);
 }
 
 export async function togglePin(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/pin`, { method: 'PATCH' });
   if (!res.ok) throw new Error('failed to toggle pin');
   const updated: unknown = await res.json();
-  if (!isNote(updated)) throw new Error('invalid note payload');
-  return updated;
+  if (!isRawNote(updated)) throw new Error('invalid note payload');
+  return toNote(updated);
 }
 
 export async function toggleArchive(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/archive`, { method: 'PATCH' });
   if (!res.ok) throw new Error('failed to toggle archive');
   const updated: unknown = await res.json();
-  if (!isNote(updated)) throw new Error('invalid note payload');
-  return updated;
+  if (!isRawNote(updated)) throw new Error('invalid note payload');
+  return toNote(updated);
 }
 
 export interface AttachmentMeta {

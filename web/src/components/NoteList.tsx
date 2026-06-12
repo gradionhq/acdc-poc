@@ -36,6 +36,8 @@ export function NoteList({
   onToggleArchive,
   onDeleteRequest,
   onDuplicate,
+  onRestore,
+  onPermanentDeleteRequest,
   attachments,
   attachmentsOpen,
   uploadError,
@@ -109,6 +111,8 @@ export function NoteList({
               onToggleArchive={onToggleArchive}
               onDeleteRequest={onDeleteRequest}
               onDuplicate={onDuplicate}
+              onRestore={onRestore}
+              onPermanentDeleteRequest={onPermanentDeleteRequest}
               attachments={attachments}
               attachmentsOpen={attachmentsOpen}
               uploadError={uploadError}

@@ -593,3 +593,82 @@ describe('NoteStore — reset()', () => {
     expect(fresh.id).toBe('1');
   });
 });
+
+describe('NoteStore — trash / restore / permanentDelete', () => {
+  it('creates a note with deletedAt=null', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    expect(n.deletedAt).toBeNull();
+  });
+
+  it('trash() sets deletedAt and excludes note from list', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    const trashed = store.trash(n.id);
+    expect(trashed?.deletedAt).toBeTypeOf('number');
+
+    const result = store.list(1, 10);
+    expect(result.total).toBe(0);
+  });
+
+  it('trash() returns undefined for unknown id', () => {
+    const store = new NoteStore();
+    expect(store.trash('nope')).toBeUndefined();
+  });
+
+  it('listTrashed() returns only trashed notes (both ids present)', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'b' });
+    const b = store.create({ title: 'b', body: 'b' });
+    store.trash(a.id);
+    store.trash(b.id);
+    const trashed = store.listTrashed();
+    const ids = trashed.map((n) => n.id);
+    expect(ids).toContain(a.id);
+    expect(ids).toContain(b.id);
+    expect(trashed).toHaveLength(2);
+  });
+
+  it('restore() clears deletedAt and returns note to active list', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    store.trash(n.id);
+    const restored = store.restore(n.id);
+    expect(restored?.deletedAt).toBeNull();
+
+    const result = store.list(1, 10);
+    expect(result.total).toBe(1);
+    expect(store.listTrashed()).toHaveLength(0);
+  });
+
+  it('restore() returns undefined for unknown id', () => {
+    const store = new NoteStore();
+    expect(store.restore('nope')).toBeUndefined();
+  });
+
+  it('permanentDelete() removes note and its attachments', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b' });
+    store.addAttachment(n.id, {
+      filename: 'f.txt',
+      contentType: 'text/plain',
+      data: Buffer.from('x'),
+    });
+    store.trash(n.id);
+    expect(store.permanentDelete(n.id)).toBe(true);
+    expect(store.get(n.id)).toBeUndefined();
+    expect(store.listAttachments(n.id)).toBeUndefined();
+  });
+
+  it('permanentDelete() returns false for unknown id', () => {
+    const store = new NoteStore();
+    expect(store.permanentDelete('nope')).toBe(false);
+  });
+
+  it('listTags excludes tags from trashed notes', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 't', body: 'b', tags: ['gone'] });
+    store.trash(n.id);
+    expect(store.listTags()).toHaveLength(0);
+  });
+});

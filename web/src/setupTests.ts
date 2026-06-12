@@ -51,6 +51,7 @@ vi.mock('lucide-react', () => {
     Sun: IconStub,
     Tag: IconStub,
     Trash2: IconStub,
+    RotateCcw: IconStub,
     X: IconStub,
     XCircle: IconStub,
   };

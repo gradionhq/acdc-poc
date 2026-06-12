@@ -14,6 +14,7 @@ function makeProps(overrides: Partial<NoteCardProps> = {}): NoteCardProps {
       pinned: false,
       archived: false,
       color: 'none' as NoteColor,
+      deletedAt: null,
     },
     editingId: null,
     editTitle: '',

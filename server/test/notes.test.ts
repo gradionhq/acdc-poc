@@ -626,6 +626,115 @@ describe('POST /api/notes/:id/duplicate', () => {
   });
 });
 
+describe('Trash endpoints', () => {
+  it('DELETE /:id moves note to trash (soft-delete) — excluded from default list', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'trashme', body: 'b' })
+      .expect(201);
+    await request(app).delete(`/api/notes/${created.body.id}`).expect(204);
+
+    // Note must not appear in the default list
+    const list = await request(app).get('/api/notes').expect(200);
+    expect((list.body as Array<{ id: string }>).some((n) => n.id === created.body.id)).toBe(false);
+  });
+
+  it('DELETE /:id returns 404 for unknown note', async () => {
+    const app = createApp();
+    await request(app).delete('/api/notes/nope').expect(404);
+  });
+
+  it('GET /api/notes/trash lists trashed notes', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'in-trash', body: 'b' })
+      .expect(201);
+    await request(app).delete(`/api/notes/${created.body.id}`).expect(204);
+
+    const trash = await request(app).get('/api/notes/trash').expect(200);
+    const ids = (trash.body as Array<{ id: string }>).map((n) => n.id);
+    expect(ids).toContain(created.body.id);
+  });
+
+  it('GET /api/notes/trash includes deletedAt timestamp', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'ts-test', body: 'b' })
+      .expect(201);
+    await request(app).delete(`/api/notes/${created.body.id}`).expect(204);
+
+    const trash = await request(app).get('/api/notes/trash').expect(200);
+    const note = (trash.body as Array<{ id: string; deletedAt: number | null }>).find(
+      (n) => n.id === created.body.id,
+    );
+    expect(note?.deletedAt).toBeTypeOf('number');
+  });
+
+  it('PATCH /:id/restore moves note back to active list', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'restore-me', body: 'b' })
+      .expect(201);
+    await request(app).delete(`/api/notes/${created.body.id}`).expect(204);
+
+    const restored = await request(app).patch(`/api/notes/${created.body.id}/restore`).expect(200);
+    expect(restored.body.deletedAt).toBeNull();
+
+    // Should appear in the default list again
+    const list = await request(app).get('/api/notes').expect(200);
+    expect((list.body as Array<{ id: string }>).some((n) => n.id === created.body.id)).toBe(true);
+
+    // Should not appear in trash
+    const trash = await request(app).get('/api/notes/trash').expect(200);
+    expect((trash.body as Array<{ id: string }>).some((n) => n.id === created.body.id)).toBe(false);
+  });
+
+  it('PATCH /:id/restore returns 404 for unknown note', async () => {
+    const app = createApp();
+    await request(app).patch('/api/notes/nope/restore').expect(404);
+  });
+
+  it('DELETE /:id/permanent removes a trashed note permanently', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'permanent-delete', body: 'b' })
+      .expect(201);
+    await request(app).delete(`/api/notes/${created.body.id}`).expect(204);
+
+    await request(app).delete(`/api/notes/${created.body.id}/permanent`).expect(204);
+
+    // Not in trash or active list
+    const trash = await request(app).get('/api/notes/trash').expect(200);
+    expect((trash.body as Array<{ id: string }>).some((n) => n.id === created.body.id)).toBe(false);
+    await request(app).get(`/api/notes/${created.body.id}`).expect(404);
+  });
+
+  it('DELETE /:id/permanent returns 404 for unknown note', async () => {
+    const app = createApp();
+    await request(app).delete('/api/notes/nope/permanent').expect(404);
+  });
+
+  it('trashed notes are excluded from archived view', async () => {
+    const app = createApp();
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'archived-then-trashed', body: 'b' })
+      .expect(201);
+    await request(app).patch(`/api/notes/${created.body.id}/archive`).expect(200);
+    await request(app).delete(`/api/notes/${created.body.id}`).expect(204);
+
+    const archivedList = await request(app).get('/api/notes?archived=true').expect(200);
+    expect((archivedList.body as Array<{ id: string }>).some((n) => n.id === created.body.id)).toBe(
+      false,
+    );
+  });
+});
+
 describe('POST /api/test/reset — guarded reset endpoint', () => {
   let savedEnv: string | undefined;
 

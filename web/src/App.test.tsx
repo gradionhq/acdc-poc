@@ -12,6 +12,7 @@ type MockNote = {
   pinned: boolean;
   archived: boolean;
   color: NoteColor;
+  deletedAt: number | null;
 };
 
 type MockAttachment = { filename: string; contentType: string; size: number; data: string };
@@ -138,6 +139,7 @@ function mockFetchSequence() {
           pinned: false,
           archived: false,
           color: source.color,
+          deletedAt: null,
         };
         notes.push(copy);
         return new Response(JSON.stringify(copy), { status: 201 });
@@ -158,6 +160,7 @@ function mockFetchSequence() {
           pinned: false,
           archived: false,
           color: b.color ?? 'none',
+          deletedAt: null,
         };
         notes.push(n);
         return new Response(JSON.stringify(n), { status: 201 });
@@ -186,11 +189,48 @@ function mockFetchSequence() {
           ? new Response(JSON.stringify(updated), { status: 200 })
           : new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
       }
-      if (init?.method === 'DELETE') {
-        const id = urlStr.split('/').pop();
-        notes = notes.filter((n) => n.id !== id);
+      // PATCH /:id/restore
+      if (init?.method === 'PATCH' && /\/api\/notes\/[^/]+\/restore$/.test(urlStr)) {
+        const noteId = urlStr.split('/').at(-2) ?? '';
+        const idx = notes.findIndex((n) => n.id === noteId);
+        if (idx === -1) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        notes[idx] = { ...notes[idx], deletedAt: null };
+        return new Response(JSON.stringify(notes[idx]), { status: 200 });
+      }
+
+      // DELETE /:id/permanent
+      if (init?.method === 'DELETE' && /\/api\/notes\/[^/]+\/permanent$/.test(urlStr)) {
+        const noteId = urlStr.split('/').at(-2) ?? '';
+        const idx = notes.findIndex((n) => n.id === noteId);
+        if (idx === -1) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        notes.splice(idx, 1);
         return new Response(null, { status: 204 });
       }
+
+      // DELETE /:id — soft-delete (trash)
+      if (init?.method === 'DELETE') {
+        const id = urlStr.split('/').pop();
+        const idx = notes.findIndex((n) => n.id === id);
+        if (idx === -1) {
+          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+        }
+        notes[idx] = { ...notes[idx], deletedAt: Date.now() };
+        return new Response(null, { status: 204 });
+      }
+
+      // GET /api/notes/trash
+      if (
+        (init?.method === undefined || init?.method === 'GET') &&
+        /\/api\/notes\/trash$/.test(urlStr)
+      ) {
+        const trashed = notes.filter((n) => n.deletedAt !== null);
+        return new Response(JSON.stringify(trashed), { status: 200 });
+      }
+
       // Parse page/pageSize/q/tag/sort/archived from URL
       const urlObj = new URL(urlStr, 'http://localhost');
       const page = Number(urlObj.searchParams.get('page') ?? '1');
@@ -204,6 +244,8 @@ function mockFetchSequence() {
       const filtered = notes
         .filter(
           (n) =>
+            // Exclude trashed notes from the default list views
+            n.deletedAt === null &&
             n.archived === archivedParam &&
             (term === '' ||
               n.title.toLowerCase().includes(term) ||
