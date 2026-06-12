@@ -1814,6 +1814,64 @@ describe('App — archive', () => {
   });
 });
 
+describe('App — trash', () => {
+  beforeEach(() => mockFetchSequence());
+
+  async function createNote(title: string) {
+    await userEvent.type(screen.getByLabelText(/^title$/i), title);
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText(title)).toBeInTheDocument());
+  }
+
+  // Soft-delete a note: open its overflow menu, click Delete, confirm in the dialog.
+  async function trashNote(title: string) {
+    await userEvent.click(screen.getByRole('button', { name: /more actions/i }));
+    await userEvent.click(
+      screen.getByRole('menuitem', { name: new RegExp(`^delete ${title}$`, 'i') }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+    await waitFor(() => expect(screen.queryByText(title)).not.toBeInTheDocument());
+  }
+
+  it('deleting a note moves it to trash and shows it in the Trash view with a Restore button', async () => {
+    render(<App />);
+    await createNote('Trash me');
+    await trashNote('Trash me');
+
+    // Switch to the Trash view
+    await userEvent.click(screen.getByRole('button', { name: /show trash/i }));
+    await waitFor(() => expect(screen.getByText('Trash me')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /^restore trash me$/i })).toBeInTheDocument();
+  });
+
+  it('restoring a trashed note removes it from the Trash view', async () => {
+    render(<App />);
+    await createNote('Restore me');
+    await trashNote('Restore me');
+
+    await userEvent.click(screen.getByRole('button', { name: /show trash/i }));
+    await waitFor(() => expect(screen.getByText('Restore me')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /^restore restore me$/i }));
+    await waitFor(() => expect(screen.queryByText('Restore me')).not.toBeInTheDocument());
+  });
+
+  it('permanently deleting a trashed note removes it entirely after confirmation', async () => {
+    render(<App />);
+    await createNote('Nuke me');
+    await trashNote('Nuke me');
+
+    await userEvent.click(screen.getByRole('button', { name: /show trash/i }));
+    await waitFor(() => expect(screen.getByText('Nuke me')).toBeInTheDocument());
+
+    // Open the permanent-delete confirm dialog and confirm
+    await userEvent.click(screen.getByRole('button', { name: /^permanently delete nuke me$/i }));
+    await userEvent.click(screen.getByRole('button', { name: /delete permanently/i }));
+    await waitFor(() => expect(screen.queryByText('Nuke me')).not.toBeInTheDocument());
+  });
+});
+
 describe('App — sort', () => {
   beforeEach(() => mockFetchSequence());
 
