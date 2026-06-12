@@ -51,8 +51,8 @@ test('delete a note — success toast appears', async ({ page }) => {
   // Delete the note (opens confirm dialog; confirm it)
   await confirmDeleteNote(item, new RegExp(`^delete ${token}$`, 'i'));
 
-  // Delete success toast must appear
-  await expect(page.getByText('Note deleted')).toBeVisible();
+  // Delete success toast must appear (soft-delete moves the note to trash)
+  await expect(page.getByText('Note moved to trash')).toBeVisible();
 });
 
 test('toast can be manually dismissed', async ({ page }) => {
