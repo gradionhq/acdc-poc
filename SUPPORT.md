@@ -4,8 +4,8 @@
 
 | Channel                                                                 | When to use                                                   |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [GitHub Issues](https://github.com/gradionai/acdc-poc/issues)           | Bug reports and concrete feature requests (use the templates) |
-| [GitHub Discussions](https://github.com/gradionai/acdc-poc/discussions) | Questions, ideas, general conversation                        |
+| [GitHub Issues](https://github.com/gradioncom/acdc-poc/issues)           | Bug reports and concrete feature requests (use the templates) |
+| [GitHub Discussions](https://github.com/gradioncom/acdc-poc/discussions) | Questions, ideas, general conversation                        |
 
 ## What is in scope
 
