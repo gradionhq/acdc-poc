@@ -10,7 +10,7 @@ Thank you for your interest in contributing! This document covers everything you
 2. Clone the repo and install all workspace dependencies:
 
 ```bash
-git clone https://github.com/gradioncom/acdc-poc.git
+git clone https://github.com/gradionhq/acdc-poc.git
 cd acdc-poc
 npm ci
 ```

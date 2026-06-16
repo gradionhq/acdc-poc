@@ -2,7 +2,7 @@
 
 A professional full-stack OSS template: React + Vite notes UI on an Express/TypeScript API, Playwright end-to-end proof, and full Apache-2.0 OSS hygiene — ready to fork as an agent-driven development baseline.
 
-[![CI](https://github.com/gradioncom/acdc-poc/actions/workflows/ci.yml/badge.svg)](https://github.com/gradioncom/acdc-poc/actions/workflows/ci.yml)
+[![CI](https://github.com/gradionhq/acdc-poc/actions/workflows/ci.yml/badge.svg)](https://github.com/gradionhq/acdc-poc/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=gradionai_acdc-poc&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=gradionai_acdc-poc)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
