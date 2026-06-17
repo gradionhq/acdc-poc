@@ -31,6 +31,7 @@ import {
   type TagStat,
 } from './api';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Modal } from './components/Modal';
 import { ToastContainer } from './ToastContainer';
 import { TagManager } from './TagManager';
 import { useTheme } from './useTheme';
@@ -116,9 +117,13 @@ export function App() {
   const [uploadError, setUploadError] = useState<Record<string, string | null>>({});
   /** Whether the keyboard shortcut help panel is open. */
   const [showHelp, setShowHelp] = useState(false);
+  /** Whether the New-note composer modal dialog is open. */
+  const [composerOpen, setComposerOpen] = useState(false);
 
-  /** Ref to the new-note title input — used by the `n` shortcut. */
+  /** Ref to the new-note title input — focused when the composer modal opens. */
   const newNoteTitleRef = useRef<HTMLInputElement>(null);
+  /** Ref to the header "+ New note" trigger; focus returns here when the modal closes. */
+  const newNoteTriggerRef = useRef<HTMLButtonElement>(null);
   /** Ref to the search input — used by the `/` shortcut. */
   const searchInputRef = useRef<HTMLInputElement>(null);
   /** Ref to the help-toggle button — focus is restored here when the panel closes. */
@@ -303,6 +308,9 @@ export function App() {
       setTagsInput('');
       setColor('none');
       setError(null);
+      // Close the composer modal and return focus to the trigger.
+      setComposerOpen(false);
+      newNoteTriggerRef.current?.focus();
       addToast('Note created', 'success');
       void refreshTags();
       void refreshTagSuggestions();
@@ -607,10 +615,23 @@ export function App() {
     }
   }
 
+  /**
+   * Dismiss the composer modal, discarding the in-progress draft, and restore
+   * focus to the "+ New note" trigger. Used by the close button, Escape, and
+   * backdrop click.
+   */
+  const onComposerClose = useCallback(() => {
+    setComposerOpen(false);
+    setTitle('');
+    setBody('');
+    setTagsInput('');
+    setColor('none');
+    newNoteTriggerRef.current?.focus();
+  }, []);
+
   const shortcutHandlers = {
     onNewNote: useCallback(() => {
-      newNoteTitleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      newNoteTitleRef.current?.focus();
+      setComposerOpen(true);
     }, []),
     onFocusSearch: useCallback(() => {
       searchInputRef.current?.focus();
@@ -622,6 +643,11 @@ export function App() {
       // which restores focus to the delete trigger.  The global handler must not
       // blur that just-restored focus, so we defer entirely to the dialog.
       if (pendingDeleteId !== null) {
+        return;
+      }
+      // The composer modal handles Escape itself (and stops propagation); defer
+      // entirely so the global handler does not also act on the same keypress.
+      if (composerOpen) {
         return;
       }
       if (showHelp) {
@@ -638,7 +664,7 @@ export function App() {
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
-    }, [pendingDeleteId, showHelp, editingId]),
+    }, [pendingDeleteId, composerOpen, showHelp, editingId]),
     onToggleHelp: useCallback(() => setShowHelp((prev) => !prev), []),
   };
 
@@ -747,6 +773,7 @@ export function App() {
           onSearchChange={setSearchInput}
           searchInputRef={searchInputRef}
           onNewNote={shortcutHandlers.onNewNote}
+          newNoteTriggerRef={newNoteTriggerRef}
           showHelp={showHelp}
           onToggleHelp={() => setShowHelp((prev) => !prev)}
           onCloseHelp={() => setShowHelp(false)}
@@ -781,26 +808,29 @@ export function App() {
             tags={tags}
           />
 
-          {view === 'all' && (
-            <NoteComposer
-              title={title}
-              onTitleChange={setTitle}
-              body={body}
-              onBodyChange={setBody}
-              tagsInput={tagsInput}
-              onTagsInputChange={setTagsInput}
-              tagSuggestions={tagSuggestions}
-              color={color}
-              onColorChange={setColor}
-              onSubmit={onSubmit}
-              newNoteTitleRef={newNoteTitleRef}
-            />
-          )}
-
           {noteList}
 
           {pagination}
         </>
+      )}
+
+      {composerOpen && (
+        <Modal title="New note" onClose={onComposerClose} initialFocusRef={newNoteTitleRef}>
+          <NoteComposer
+            title={title}
+            onTitleChange={setTitle}
+            body={body}
+            onBodyChange={setBody}
+            tagsInput={tagsInput}
+            onTagsInputChange={setTagsInput}
+            tagSuggestions={tagSuggestions}
+            color={color}
+            onColorChange={setColor}
+            onSubmit={onSubmit}
+            newNoteTitleRef={newNoteTitleRef}
+            embedded
+          />
+        </Modal>
       )}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

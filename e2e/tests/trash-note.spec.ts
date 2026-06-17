@@ -1,17 +1,4 @@
-import { test, expect, confirmDeleteNote } from '../fixtures';
-
-// Helper: create a note and wait for the form to reset (title cleared).
-async function createNote(
-  page: import('@playwright/test').Page,
-  title: string,
-  body: string,
-): Promise<void> {
-  const titleInput = page.getByLabel(/^title$/i);
-  await titleInput.fill(title);
-  await page.getByLabel(/^body$/i).fill(body);
-  await page.getByRole('button', { name: /add note/i }).click();
-  await expect(titleInput).toHaveValue('');
-}
+import { test, expect, confirmDeleteNote, createNote } from '../fixtures';
 
 // Wait for the notes list to finish loading / re-fetching.
 async function waitForNotesListReady(page: import('@playwright/test').Page): Promise<void> {

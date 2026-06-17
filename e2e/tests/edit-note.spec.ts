@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect, createNote } from '../fixtures';
 
 test('create then edit a note and see updated text', async ({ page }) => {
   const title = `[edit-e2e] note-${Date.now()}`;
@@ -7,10 +7,8 @@ test('create then edit a note and see updated text', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
 
-  // Create the note
-  await page.getByLabel(/title/i).fill(title);
-  await page.getByLabel(/body/i).fill('original body');
-  await page.getByRole('button', { name: /add note/i }).click();
+  // Create the note via the composer modal.
+  await createNote(page, title, 'original body');
 
   const item = page.getByRole('listitem').filter({ hasText: title });
   await expect(item).toBeVisible();

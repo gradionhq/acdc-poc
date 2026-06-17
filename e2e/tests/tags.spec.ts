@@ -1,22 +1,4 @@
-import { test, expect } from '../fixtures';
-
-// Creates a note via the UI with optional tags (comma-separated).
-// Waits for the title input to clear, confirming the server accepted the note.
-async function createNote(
-  page: import('@playwright/test').Page,
-  title: string,
-  body: string,
-  tags?: string,
-): Promise<void> {
-  const titleInput = page.getByLabel(/^title$/i);
-  await titleInput.fill(title);
-  await page.getByLabel(/^body$/i).fill(body);
-  if (tags !== undefined) {
-    await page.getByRole('combobox', { name: /^tags$/i }).fill(tags);
-  }
-  await page.getByRole('button', { name: /add note/i }).click();
-  await expect(titleInput).toHaveValue('');
-}
+import { test, expect, createNote } from '../fixtures';
 
 test('create a tagged note and assert the tag renders', async ({ page }) => {
   // Use a unique per-run token to avoid collisions with accumulated server state.

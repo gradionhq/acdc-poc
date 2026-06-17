@@ -295,6 +295,7 @@ describe('App — toast notifications', () => {
 
   it('shows a success toast after creating a note', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Toast note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body text');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -303,6 +304,7 @@ describe('App — toast notifications', () => {
 
   it('shows a success toast after deleting a note', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Delete me');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -318,6 +320,7 @@ describe('App — toast notifications', () => {
 
   it('shows a success toast after editing a note', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Edit me');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'original body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -334,6 +337,7 @@ describe('App — toast notifications', () => {
 
   it('shows a success toast after pinning a note', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Pin toast note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -345,6 +349,7 @@ describe('App — toast notifications', () => {
 
   it('shows a success toast after unpinning a note', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Unpin toast note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -375,6 +380,7 @@ describe('App — toast notifications', () => {
       }),
     );
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Fail note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -383,6 +389,7 @@ describe('App — toast notifications', () => {
 
   it('dismisses a toast manually when the dismiss button is clicked', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Manual dismiss');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));

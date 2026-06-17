@@ -19,6 +19,12 @@ export interface NoteComposerProps {
   onColorChange: (color: NoteColor) => void;
   onSubmit: (e: FormEvent) => void;
   newNoteTitleRef: RefObject<HTMLInputElement>;
+  /**
+   * When true the composer is hosted inside a modal dialog that already
+   * supplies the panel chrome and "New note" heading, so the form drops its
+   * own card surface and internal heading to avoid visual/heading duplication.
+   */
+  embedded?: boolean;
 }
 
 export function NoteComposer({
@@ -33,17 +39,23 @@ export function NoteComposer({
   onColorChange,
   onSubmit,
   newNoteTitleRef,
+  embedded = false,
 }: NoteComposerProps) {
   const words = countWords(body);
   const chars = countChars(body);
 
+  const formClass = embedded ? styles.formEmbedded : styles.form;
+  const groupClass = embedded ? styles.fieldGroup : `${styles.card} ${styles.fieldGroup}`;
+
   return (
-    <form onSubmit={onSubmit} aria-label="New note" className={styles.form}>
-      <div className={`${styles.card} ${styles.fieldGroup}`}>
-        <div className={styles.formHeader}>
-          <PenLine size={16} className={styles.formTitleIcon} aria-hidden="true" />
-          <h2 className={styles.formTitle}>New note</h2>
-        </div>
+    <form onSubmit={onSubmit} aria-label="New note" className={formClass}>
+      <div className={groupClass}>
+        {!embedded && (
+          <div className={styles.formHeader}>
+            <PenLine size={16} className={styles.formTitleIcon} aria-hidden="true" />
+            <h2 className={styles.formTitle}>New note</h2>
+          </div>
+        )}
 
         <label className={styles.field}>
           <span className={styles.fieldLabel}>Title</span>

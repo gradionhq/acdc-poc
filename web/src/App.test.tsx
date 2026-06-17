@@ -298,11 +298,132 @@ function mockFetchSequence() {
   );
 }
 
+/** Open the New-note composer modal by clicking the header action. */
+async function openComposer() {
+  await userEvent.click(screen.getByRole('button', { name: /new note/i }));
+}
+
+describe('App — new-note composer modal', () => {
+  beforeEach(() => mockFetchSequence());
+
+  it('does not render the composer inline on the All Notes view', () => {
+    render(<App />);
+    // The composer lives in a modal now, so its fields are absent until opened.
+    expect(screen.queryByRole('dialog', { name: /new note/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^title$/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add note/i })).not.toBeInTheDocument();
+  });
+
+  it('opens the composer modal from the header "New note" action', async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
+    const dialog = await screen.findByRole('dialog', { name: /new note/i });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    // The composer's fields and submit are now inside the dialog.
+    expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^body$/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add note/i })).toBeInTheDocument();
+  });
+
+  it('moves focus into the dialog (title input) when it opens', async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
+    await waitFor(() => expect(screen.getByLabelText(/^title$/i)).toHaveFocus());
+  });
+
+  it('on successful save closes the dialog, shows the note, and restores focus to the trigger', async () => {
+    render(<App />);
+    const trigger = screen.getByRole('button', { name: /new note/i });
+    await userEvent.click(trigger);
+
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Modal note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'created via modal');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+
+    // Dialog closes…
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /new note/i })).not.toBeInTheDocument(),
+    );
+    // …the new note appears in the list…
+    expect(await screen.findByText('Modal note')).toBeInTheDocument();
+    // …and focus returns to the trigger.
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes via the close button and discards the in-progress draft', async () => {
+    render(<App />);
+    const trigger = screen.getByRole('button', { name: /new note/i });
+    await userEvent.click(trigger);
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Abandoned draft');
+
+    await userEvent.click(screen.getByRole('button', { name: /close dialog/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /new note/i })).not.toBeInTheDocument(),
+    );
+    expect(trigger).toHaveFocus();
+
+    // Re-open: the draft was discarded, so the title is empty again.
+    await userEvent.click(trigger);
+    expect(screen.getByLabelText(/^title$/i)).toHaveValue('');
+  });
+
+  it('closes when Escape is pressed and restores focus to the trigger', async () => {
+    render(<App />);
+    const trigger = screen.getByRole('button', { name: /new note/i });
+    await userEvent.click(trigger);
+    expect(screen.getByRole('dialog', { name: /new note/i })).toBeInTheDocument();
+
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /new note/i })).not.toBeInTheDocument(),
+    );
+    expect(trigger).toHaveFocus();
+  });
+
+  it('closes when the backdrop is clicked', async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
+    expect(screen.getByRole('dialog', { name: /new note/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('modal-backdrop'));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /new note/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('traps focus within the dialog (Shift+Tab from the title wraps to the last control)', async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
+    const titleInput = screen.getByLabelText(/^title$/i);
+    await waitFor(() => expect(titleInput).toHaveFocus());
+
+    // Title is the first focusable control after the close button. Shift+Tab from
+    // the close button (the very first focusable) must wrap to the last control,
+    // keeping focus inside the dialog rather than escaping to the page behind it.
+    const closeBtn = screen.getByRole('button', { name: /close dialog/i });
+    closeBtn.focus();
+    await userEvent.keyboard('{Shift>}{Tab}{/Shift}');
+    const dialog = screen.getByRole('dialog', { name: /new note/i });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).not.toBe(closeBtn);
+  });
+
+  it('preserves create validation: empty title/body does not create a note or close the dialog', async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /new note/i }));
+    // Submit with empty fields — nothing should be created and the dialog stays open.
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    expect(screen.getByRole('dialog', { name: /new note/i })).toBeInTheDocument();
+  });
+});
+
 describe('App', () => {
   beforeEach(() => mockFetchSequence());
 
   it('creates a note and shows it in the list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/title/i), 'My note');
     await userEvent.type(screen.getByLabelText(/body/i), 'Hello');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -311,6 +432,7 @@ describe('App', () => {
 
   it('deletes a note so it disappears from the list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/title/i), 'Temp note');
     await userEvent.type(screen.getByLabelText(/body/i), 'to delete');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -328,6 +450,7 @@ describe('App', () => {
 
   it('clicking delete opens confirm dialog and cancel does NOT delete the note', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/title/i), 'Keep me note');
     await userEvent.type(screen.getByLabelText(/body/i), 'please keep');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -346,6 +469,7 @@ describe('App', () => {
 
   it('pressing Escape in the confirm dialog cancels deletion', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/title/i), 'Escape test note');
     await userEvent.type(screen.getByLabelText(/body/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -364,6 +488,7 @@ describe('App', () => {
 
   it('pressing Escape in the confirm dialog cancels AND restores focus to the delete trigger', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/title/i), 'Focus restore note');
     await userEvent.type(screen.getByLabelText(/body/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -389,6 +514,7 @@ describe('App', () => {
 
   it('confirm dialog names the note being deleted', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/title/i), 'My named note');
     await userEvent.type(screen.getByLabelText(/body/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -402,6 +528,7 @@ describe('App', () => {
 
   it('edits a note and shows the updated text in the list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Original title');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'Original body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -427,6 +554,7 @@ describe('App', () => {
 
   it('does not save when edit title or body is cleared to whitespace', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Keep me');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'Keep body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -506,6 +634,7 @@ describe('App', () => {
 
   it('empty state does not show when notes exist', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Has notes');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body text');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -631,6 +760,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByText('Existing 5')).toBeInTheDocument());
 
     // Create a 6th note — with newest sort it surfaces on page 1
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/title/i), 'Sixth note');
     await userEvent.type(screen.getByLabelText(/body/i), 'latest');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -709,12 +839,15 @@ describe('App', () => {
     // cleared) so this full-App test no longer depends on the racy multi-fetch
     // navigation chain settling within a wall-clock timeout. End-to-end
     // navigation is covered by e2e/tests/pagination.spec.ts.
+    await openComposer();
     const titleInput = screen.getByLabelText(/^title$/i);
     await userEvent.type(titleInput, 'Seventh note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'appended');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
-    await waitFor(() => expect(titleInput).toHaveValue(''));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /new note/i })).not.toBeInTheDocument(),
+    );
   });
 
   it('new note is visible after create — title sort navigates to the correct page', async () => {
@@ -824,12 +957,15 @@ describe('App', () => {
     // navigation chain settling within a wall-clock timeout. End-to-end title
     // sort + navigation is covered by e2e/tests/sort-notes.spec.ts and
     // e2e/tests/pagination.spec.ts.
+    await openComposer();
     const titleInput = screen.getByLabelText(/^title$/i);
     await userEvent.type(titleInput, 'Zebra');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
-    await waitFor(() => expect(titleInput).toHaveValue(''));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /new note/i })).not.toBeInTheDocument(),
+    );
   });
 
   it('navigates to next and previous pages', async () => {
@@ -882,11 +1018,13 @@ describe('App', () => {
     render(<App />);
 
     // Create two notes with different titles
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Alpha note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'first body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Alpha note')).toBeInTheDocument());
 
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Beta note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'second body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -908,6 +1046,7 @@ describe('App', () => {
   it('search with no matches shows an empty list', async () => {
     render(<App />);
 
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Unique note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'some content');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -920,6 +1059,7 @@ describe('App', () => {
   it('shows "no notes match your search" when filter is active but no results match', async () => {
     render(<App />);
 
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Filter test note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'some body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -939,11 +1079,13 @@ describe('App', () => {
 
     // Create two notes so there is something to filter OUT, which lets us
     // confirm the debounce has fired before submitting the new note.
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Alpha existing');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'alpha body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Alpha existing')).toBeInTheDocument());
 
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Beta existing');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'beta body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -958,6 +1100,7 @@ describe('App', () => {
     expect(screen.getByText('Alpha existing')).toBeInTheDocument();
 
     // Create a new note that does NOT match the active filter ('Alpha')
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Unrelated note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'unrelated body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -975,6 +1118,7 @@ describe('App — tags', () => {
 
   it('creates a note with tags and renders them in the list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Tagged note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'note body');
     await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'alpha, beta');
@@ -987,6 +1131,7 @@ describe('App — tags', () => {
 
   it('edits tags on a note and shows updated tags', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Note for tags edit');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'oldtag');
@@ -1008,6 +1153,7 @@ describe('App — tags', () => {
   it('filters by tag when tag filter input is filled', async () => {
     render(<App />);
 
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Work note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'work');
@@ -1015,6 +1161,7 @@ describe('App — tags', () => {
 
     await waitFor(() => expect(screen.getByText('Work note')).toBeInTheDocument());
 
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Personal note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'personal');
@@ -1033,6 +1180,7 @@ describe('App — tag deduplication', () => {
 
   it('deduplicates tags before sending to server', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Dup tag note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'alpha, beta, alpha');
@@ -1050,6 +1198,7 @@ describe('App — pin', () => {
 
   it('shows a Pin button for each note', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Pin me');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1060,6 +1209,7 @@ describe('App — pin', () => {
 
   it('toggling pin changes button label to Unpin', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Toggle pin');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1073,6 +1223,7 @@ describe('App — pin', () => {
 
   it('unpinning a note changes button label back to Pin', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Unpin me');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1151,6 +1302,7 @@ describe('App — attachments', () => {
 
   it('shows Attachments button for each note', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Attach note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1163,6 +1315,7 @@ describe('App — attachments', () => {
 
   it('opens attachments panel and shows empty state', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Attach note open');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1176,6 +1329,7 @@ describe('App — attachments', () => {
 
   it('uploads an attachment and shows it in the list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Attach note upload');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1198,6 +1352,7 @@ describe('App — attachments', () => {
 
   it('shows a Delete button for each attachment', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Delete btn note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1224,6 +1379,7 @@ describe('App — attachments', () => {
     );
 
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Del att note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1260,6 +1416,7 @@ describe('App — attachments', () => {
     );
 
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Cancel del note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1287,6 +1444,7 @@ describe('App — multi-file upload and drag-and-drop', () => {
 
   it('shows the drag-and-drop dropzone when attachments panel is open', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'DnD note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1303,6 +1461,7 @@ describe('App — multi-file upload and drag-and-drop', () => {
 
   it('file input accepts multiple files', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Multi upload note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1320,6 +1479,7 @@ describe('App — multi-file upload and drag-and-drop', () => {
 
   it('uploading multiple files via file picker shows all in attachment list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Batch upload note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1342,6 +1502,7 @@ describe('App — multi-file upload and drag-and-drop', () => {
 
   it('dropping files onto the dropzone uploads them and shows in list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Drop note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1372,6 +1533,7 @@ describe('App — multi-file upload and drag-and-drop', () => {
 
   it('dragover highlights the dropzone and dragleave removes highlight', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Highlight note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1427,11 +1589,13 @@ describe('App — word/character count', () => {
 
   it('shows "0 words, 0 characters" initially when body is empty', async () => {
     render(<App />);
+    await openComposer();
     expect(screen.getByText('0 words, 0 characters')).toBeInTheDocument();
   });
 
   it('updates word and character count as user types in the body field', async () => {
     render(<App />);
+    await openComposer();
     const bodyInput = screen.getByLabelText(/^body$/i);
     await userEvent.type(bodyInput, 'hello world');
     expect(screen.getByText('2 words, 11 characters')).toBeInTheDocument();
@@ -1439,6 +1603,7 @@ describe('App — word/character count', () => {
 
   it('uses singular "word" when count is 1', async () => {
     render(<App />);
+    await openComposer();
     const bodyInput = screen.getByLabelText(/^body$/i);
     await userEvent.type(bodyInput, 'hello');
     expect(screen.getByText('1 word, 5 characters')).toBeInTheDocument();
@@ -1446,6 +1611,7 @@ describe('App — word/character count', () => {
 
   it('uses singular "character" when count is 1', async () => {
     render(<App />);
+    await openComposer();
     const bodyInput = screen.getByLabelText(/^body$/i);
     await userEvent.type(bodyInput, 'a');
     expect(screen.getByText('1 word, 1 character')).toBeInTheDocument();
@@ -1453,11 +1619,13 @@ describe('App — word/character count', () => {
 
   it('resets count to 0 after note is submitted', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'My note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'hello world');
     expect(screen.getByText('2 words, 11 characters')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('My note')).toBeInTheDocument());
+    await openComposer();
     expect(screen.getByText('0 words, 0 characters')).toBeInTheDocument();
   });
 });
@@ -1620,6 +1788,7 @@ describe('App — color labels', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument(),
     );
+    await openComposer();
     // Each color in the palette should have a swatch button
     for (const c of ['none', 'red', 'yellow', 'green', 'blue', 'purple']) {
       expect(screen.getByRole('button', { name: `Color ${c}` })).toBeInTheDocument();
@@ -1628,6 +1797,7 @@ describe('App — color labels', () => {
 
   it('creates a note with a selected color and renders a data-color attribute on the card', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Red note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     // Select the "red" swatch
@@ -1643,6 +1813,7 @@ describe('App — color labels', () => {
 
   it('note with no color shows data-color="none"', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Plain note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1655,6 +1826,7 @@ describe('App — color labels', () => {
 
   it('edit form shows color swatches and updating color changes data-color on card', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Color edit note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1686,6 +1858,7 @@ describe('App — duplicate', () => {
 
   it('shows a Duplicate button for each note', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Dup me');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1698,6 +1871,7 @@ describe('App — duplicate', () => {
 
   it('clicking Duplicate creates a copy with prefixed title in the list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Original note');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'the body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1710,6 +1884,7 @@ describe('App — duplicate', () => {
 
   it('the copy and the original are independent — editing one does not affect the other', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Source');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1737,6 +1912,7 @@ describe('App — archive', () => {
 
   it('shows an Archive button for each active note', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Archive me');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1747,6 +1923,7 @@ describe('App — archive', () => {
 
   it('archiving a note removes it from the active list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'To Archive');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1765,6 +1942,7 @@ describe('App — archive', () => {
 
   it('clicking the archived toggle shows archived notes and Unarchive button', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Will Archive');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1784,6 +1962,7 @@ describe('App — archive', () => {
 
   it('unarchiving a note from the archived view removes it from the archived list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Unarchive me');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1804,11 +1983,13 @@ describe('App — archive', () => {
 
   it('archived notes do not appear in active view search results', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Searchable active');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
     await waitFor(() => expect(screen.getByText('Searchable active')).toBeInTheDocument());
 
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Searchable archived');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1829,6 +2010,7 @@ describe('App — trash', () => {
   beforeEach(() => mockFetchSequence());
 
   async function createNote(title: string) {
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), title);
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1898,6 +2080,7 @@ describe('App — sort', () => {
 
   it('changing sort to oldest refreshes the list and resets to page 1', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Note A');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body a');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -1912,6 +2095,7 @@ describe('App — sort', () => {
 
   it('changing sort to title refreshes the list', async () => {
     render(<App />);
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Banana');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -2004,12 +2188,15 @@ describe('App — title-sort create with duplicate titles', () => {
     // assert the create succeeded (composer cleared), so this full-App test no
     // longer depends on the racy multi-fetch navigation chain settling within a
     // wall-clock timeout.
+    await openComposer();
     const titleInput = screen.getByLabelText(/^title$/i);
     await userEvent.type(titleInput, 'Zebra');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'duplicate title body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
 
-    await waitFor(() => expect(titleInput).toHaveValue(''));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /new note/i })).not.toBeInTheDocument(),
+    );
   });
 });
 
@@ -2163,6 +2350,7 @@ describe('App — duplicate sort-aware navigation', () => {
     // Create 5 notes so that page 1 is exactly full with oldest sort.
     const titles = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'];
     for (const t of titles) {
+      await openComposer();
       await userEvent.type(screen.getByLabelText(/^title$/i), t);
       await userEvent.type(screen.getByLabelText(/^body$/i), `${t} body`);
       await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -2257,6 +2445,7 @@ describe('App — create with pinned notes', () => {
 
     // Create a new (unpinned) note — should land on page 2 since all 5 pinned
     // notes occupy page 1 and the unpinned note sorts after them
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'New unpinned');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -2342,6 +2531,7 @@ describe('App — create with pinned notes', () => {
     // Set the fields with fireEvent.change rather than userEvent.type: with 11
     // notes rendered, per-keystroke re-renders are slow enough to flake the
     // downstream navigation assertion on constrained CI runners.
+    await openComposer();
     fireEvent.change(screen.getByLabelText(/^title$/i), {
       target: { value: 'New unpinned oldest' },
     });
@@ -2372,6 +2562,7 @@ describe('App — create and duplicate with both query and tag filter active', (
     // Create 5 tagged notes to fill page 1
     const titles = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'];
     for (const t of titles) {
+      await openComposer();
       await userEvent.type(screen.getByLabelText(/^title$/i), t);
       await userEvent.type(screen.getByLabelText(/^body$/i), `${t} body`);
       await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'fruit');
@@ -2391,6 +2582,7 @@ describe('App — create and duplicate with both query and tag filter active', (
     expect(screen.getByText('Apple')).toBeInTheDocument();
 
     // Create a note that does NOT match either filter
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Zucchini');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'veggie body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));
@@ -2413,6 +2605,7 @@ describe('App — create and duplicate with both query and tag filter active', (
     // Create 5 tagged notes to fill page 1
     const titles = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'];
     for (const t of titles) {
+      await openComposer();
       await userEvent.type(screen.getByLabelText(/^title$/i), t);
       await userEvent.type(screen.getByLabelText(/^body$/i), `${t} body`);
       await userEvent.type(screen.getByRole('combobox', { name: /^tags$/i }), 'fruit');
@@ -2464,13 +2657,16 @@ describe('App — keyboard shortcuts', () => {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
     render(<App />);
-    // Wait for initial render
-    await waitFor(() => expect(screen.getByLabelText(/^title$/i)).toBeInTheDocument());
+    // The composer is not present until the shortcut opens it.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /new note/i })).toBeInTheDocument(),
+    );
 
     act(() => {
       pressKey('n');
     });
 
+    // Pressing `n` opens the composer modal with the title input focused.
     await waitFor(() => expect(screen.getByLabelText(/^title$/i)).toHaveFocus());
   });
 
@@ -2552,6 +2748,7 @@ describe('App — keyboard shortcuts', () => {
     render(<App />);
 
     // Create a note
+    await openComposer();
     await userEvent.type(screen.getByLabelText(/^title$/i), 'Edit me');
     await userEvent.type(screen.getByLabelText(/^body$/i), 'some body');
     await userEvent.click(screen.getByRole('button', { name: /add note/i }));

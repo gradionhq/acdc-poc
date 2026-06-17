@@ -1,4 +1,4 @@
-import { test as base, expect, type Locator } from '@playwright/test';
+import { test as base, expect, type Locator, type Page } from '@playwright/test';
 
 // Reset the shared in-memory server before every test so specs don't accumulate
 // state. The reset endpoint is mounted only when the server runs with
@@ -19,6 +19,31 @@ export const test = base.extend<{ _reset: void }>({
  */
 export async function openOverflowMenu(item: Locator): Promise<void> {
   await item.getByRole('button', { name: /more actions/i }).click();
+}
+
+/**
+ * Create a note through the UI. The composer now lives in a modal dialog opened
+ * by the header "New note" action, so this opens the dialog, fills the fields
+ * (and optional comma-separated tags), submits, and waits for the dialog to
+ * close — which the app does automatically on a successful save.
+ */
+export async function createNote(
+  page: Page,
+  title: string,
+  body: string,
+  tags?: string,
+): Promise<void> {
+  await page.getByRole('button', { name: /new note/i }).click();
+  const dialog = page.getByRole('dialog', { name: /new note/i });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel(/^title$/i).fill(title);
+  await dialog.getByLabel(/^body$/i).fill(body);
+  if (tags !== undefined) {
+    await dialog.getByRole('combobox', { name: /^tags$/i }).fill(tags);
+  }
+  await dialog.getByRole('button', { name: /add note/i }).click();
+  // On a successful save the app closes the composer modal.
+  await expect(dialog).toHaveCount(0);
 }
 
 /**
