@@ -1,0 +1,45 @@
+/*
+ * AppShell layout styles — CSS Module.
+ * Sticky top header + left sidebar + main content area.
+ * All values reference design-system tokens; no magic numbers.
+ */
+
+/* ── Shell root ──────────────────────────────────────────────── */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Body row: sidebar + main ────────────────────────────────── */
+
+.body {
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  flex: 1;
+  width: 100%;
+  max-width: 72rem; /* ~1152 px — comfortable reading width for the shell */
+  margin: 0 auto;
+}
+
+/* ── Main content area ───────────────────────────────────────── */
+
+.main {
+  min-width: 0; /* allow children to shrink instead of forcing overflow */
+  padding: var(--space-6) var(--space-6) var(--space-8);
+}
+
+/* ── Responsive overrides — ≤ 768 px (sidebar collapses on top) ─ */
+
+@media (max-width: 768px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+
+  .main {
+    padding: var(--space-4) var(--space-4) var(--space-6);
+    /* Prevent any child from overflowing the content column */
+    overflow-x: hidden;
+  }
+}

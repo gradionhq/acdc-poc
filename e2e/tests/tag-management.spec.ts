@@ -61,7 +61,7 @@ test('tag management panel: rename a tag, verify notes updated, then delete it',
   ).not.toBeVisible();
 
   // Close the tag manager panel and verify notes were updated
-  await page.getByRole('button', { name: /hide tag manager/i }).click();
+  await page.getByRole('button', { name: /show all notes/i }).click();
 
   const searchBox = page.getByRole('textbox', { name: /search notes/i });
   await searchBox.fill(`[tag-mgmt]`);
@@ -91,7 +91,7 @@ test('tag management panel: rename a tag, verify notes updated, then delete it',
   ).not.toBeVisible();
 
   // Close manager and verify tag is gone from notes
-  await page.getByRole('button', { name: /hide tag manager/i }).click();
+  await page.getByRole('button', { name: /show all notes/i }).click();
 
   const noteAAfter = page.getByRole('listitem').filter({ hasText: titleA });
   const noteBAfter = page.getByRole('listitem').filter({ hasText: titleB });

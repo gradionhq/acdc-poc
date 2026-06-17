@@ -45,7 +45,7 @@ test('assigning a color to a tag colors its chip on the note card', async ({ pag
   ).toHaveAttribute('aria-pressed', 'true');
 
   // Close the tag manager and verify the chip on the note card is now green.
-  await page.getByRole('button', { name: /hide tag manager/i }).click();
+  await page.getByRole('button', { name: /show all notes/i }).click();
 
   const coloredChip = noteItem.locator(`[data-tag="${tag}"]`);
   await expect(coloredChip).toHaveAttribute('data-tag-color', 'green');

@@ -132,7 +132,7 @@ test('unarchive a note: it disappears from the archived view and returns to the 
   // Switch back to active view — note must reappear.
   // Wait for the list to be ready (the view switch triggers an async refetch;
   // findNoteItem uses waitFor per-page so it won't race the refetch).
-  await page.getByRole('button', { name: /show active notes/i }).click();
+  await page.getByRole('button', { name: /show all notes/i }).click();
   await waitForNotesListReady(page);
   const restoredItem = await findNoteItem(page, noteTitle);
   await expect(restoredItem).toBeVisible();

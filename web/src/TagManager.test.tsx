@@ -336,14 +336,15 @@ describe('App — tag manager integration', () => {
     );
   });
 
-  it('clicking "Hide tag manager" hides the panel', async () => {
+  it('navigating away from the Tags view hides the panel', async () => {
     render(<App />);
     const btn = await screen.findByRole('button', { name: /manage tags/i });
     await userEvent.click(btn);
     await waitFor(() =>
       expect(screen.getByRole('region', { name: /tag manager/i })).toBeInTheDocument(),
     );
-    await userEvent.click(screen.getByRole('button', { name: /hide tag manager/i }));
+    // Switching to another sidebar view (All notes) hides the tag manager.
+    await userEvent.click(screen.getByRole('button', { name: /show all notes/i }));
     await waitFor(() =>
       expect(screen.queryByRole('region', { name: /tag manager/i })).not.toBeInTheDocument(),
     );

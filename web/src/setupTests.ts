@@ -46,6 +46,7 @@ vi.mock('lucide-react', () => {
     Pencil: IconStub,
     Pin: IconStub,
     PinOff: IconStub,
+    Plus: IconStub,
     Search: IconStub,
     SearchX: IconStub,
     Sun: IconStub,

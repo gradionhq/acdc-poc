@@ -21,11 +21,6 @@
 
 /* ── Individual field wrappers ───────────────────────────────── */
 
-.fieldSearch {
-  flex: 1 1 14rem;
-  min-width: 0;
-}
-
 .fieldTag {
   flex: 0 1 11rem;
   min-width: 0;
@@ -187,7 +182,6 @@
 
 @media (max-width: 480px) {
   /* Each field takes full row width so filters stack cleanly */
-  .fieldSearch,
   .fieldTag,
   .fieldSort {
     flex: 1 1 100%;

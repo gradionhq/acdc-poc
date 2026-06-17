@@ -1,42 +1,68 @@
 import type { RefObject } from 'react';
-import { HelpCircle, Moon, Sun, Tag, X } from 'lucide-react';
+import { HelpCircle, Moon, Plus, Search, Sun, X } from 'lucide-react';
 import { Button } from './Button';
-import { TagManager } from '../TagManager';
 import { SHORTCUTS } from '../useKeyboardShortcuts';
-import styles from './Header.module.css';
+import styles from './HeaderBar.module.css';
 
-export interface HeaderProps {
+export interface HeaderBarProps {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
+  /** Current value of the global search box. */
+  searchInput: string;
+  onSearchChange: (value: string) => void;
+  searchInputRef: RefObject<HTMLInputElement>;
+  /** Invoked by the New-note action — focuses the composer. */
+  onNewNote: () => void;
   showHelp: boolean;
   onToggleHelp: () => void;
   onCloseHelp: () => void;
-  showTagManager: boolean;
-  onToggleTagManager: () => void;
-  onTagsChanged: () => void;
   helpToggleRef: RefObject<HTMLButtonElement>;
   helpCloseBtnRef: RefObject<HTMLButtonElement>;
 }
 
-export function Header({
+/**
+ * Persistent, sticky top header: brand/title, global search, the New-note
+ * action, and the help + theme toggles. The keyboard-shortcuts help panel is
+ * owned here because the help toggle lives in the header.
+ */
+export function HeaderBar({
   theme,
   toggleTheme,
+  searchInput,
+  onSearchChange,
+  searchInputRef,
+  onNewNote,
   showHelp,
   onToggleHelp,
   onCloseHelp,
-  showTagManager,
-  onToggleTagManager,
-  onTagsChanged,
   helpToggleRef,
   helpCloseBtnRef,
-}: HeaderProps) {
+}: HeaderBarProps) {
   return (
-    <>
-      <header className={styles.pageHeader}>
-        <h1 className={styles.pageTitle}>Notes</h1>
-        <div className={styles.headerActions}>
+    <header className={styles.header}>
+      <div className={styles.bar}>
+        <h1 className={styles.brand}>Notes</h1>
+
+        <div className={styles.search} role="search">
+          <Search size={16} className={styles.searchIcon} aria-hidden="true" />
+          <input
+            ref={searchInputRef}
+            className={styles.searchInput}
+            aria-label="Search notes"
+            placeholder="Search notes…"
+            value={searchInput}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+        </div>
+
+        <div className={styles.actions}>
+          <Button variant="primary" onClick={onNewNote}>
+            <Plus size={15} aria-hidden="true" className={styles.btnIcon} />
+            New note
+          </Button>
           <button
             ref={helpToggleRef}
+            type="button"
             aria-label="Show keyboard shortcuts"
             aria-pressed={showHelp}
             className={styles.iconButton}
@@ -44,16 +70,8 @@ export function Header({
           >
             <HelpCircle size={18} aria-hidden="true" />
           </button>
-          <Button
-            variant="secondary"
-            onClick={onToggleTagManager}
-            aria-expanded={showTagManager}
-            aria-controls="tag-manager-panel"
-          >
-            <Tag size={15} aria-hidden="true" className={styles.btnIcon} />
-            {showTagManager ? 'Hide tag manager' : 'Manage tags'}
-          </Button>
           <button
+            type="button"
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             className="theme-toggle"
             onClick={toggleTheme}
@@ -65,7 +83,7 @@ export function Header({
             )}
           </button>
         </div>
-      </header>
+      </div>
 
       {showHelp && (
         <div
@@ -78,6 +96,7 @@ export function Header({
             <h2 className={styles.helpPanelTitle}>Keyboard shortcuts</h2>
             <button
               ref={helpCloseBtnRef}
+              type="button"
               aria-label="Close keyboard shortcuts"
               className={styles.iconButton}
               onClick={onCloseHelp}
@@ -95,12 +114,6 @@ export function Header({
           </ul>
         </div>
       )}
-
-      {showTagManager && (
-        <div id="tag-manager-panel">
-          <TagManager onChanged={onTagsChanged} />
-        </div>
-      )}
-    </>
+    </header>
   );
 }

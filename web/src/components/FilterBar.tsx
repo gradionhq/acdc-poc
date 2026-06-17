@@ -1,62 +1,31 @@
-import type { RefObject } from 'react';
-import { Search, Tag, ArrowUpDown, Archive, Trash2 } from 'lucide-react';
+import { Tag, ArrowUpDown } from 'lucide-react';
 import type { SortOrder, TagMode, TagStat } from '../api';
 import { TagChip } from './TagChip';
 import styles from './FilterBar.module.css';
 
 export interface FilterBarProps {
-  searchInput: string;
-  onSearchChange: (value: string) => void;
   tagFilter: string;
   onTagFilterChange: (value: string) => void;
   tagMode: TagMode;
   onTagModeChange: (mode: TagMode) => void;
   sort: SortOrder;
   onSortChange: (sort: SortOrder) => void;
-  showArchived: boolean;
-  onToggleArchived: () => void;
-  showTrash: boolean;
-  onToggleTrash: () => void;
-  searchInputRef: RefObject<HTMLInputElement>;
   /** All tags in use, with their colors — rendered as clickable filter chips. */
   tags?: TagStat[];
 }
 
 export function FilterBar({
-  searchInput,
-  onSearchChange,
   tagFilter,
   onTagFilterChange,
   tagMode,
   onTagModeChange,
   sort,
   onSortChange,
-  showArchived,
-  onToggleArchived,
-  showTrash,
-  onToggleTrash,
-  searchInputRef,
   tags = [],
 }: FilterBarProps) {
   const isAndMode = tagMode === 'and';
   return (
     <div className={styles.filterBar} role="search" aria-label="Filter and sort notes">
-      {/* Search */}
-      <label className={`${styles.fieldLabel} ${styles.fieldSearch}`}>
-        Search
-        <div className={styles.inputWrapper}>
-          <Search size={14} className={styles.inputIcon} aria-hidden="true" />
-          <input
-            ref={searchInputRef}
-            className={styles.inputWithIcon}
-            aria-label="Search notes"
-            placeholder="Search notes…"
-            value={searchInput}
-            onChange={(e) => onSearchChange(e.target.value)}
-          />
-        </div>
-      </label>
-
       {/* Tag filter */}
       <label className={`${styles.fieldLabel} ${styles.fieldTag}`}>
         Filter by tag
@@ -102,34 +71,6 @@ export function FilterBar({
           </select>
         </div>
       </label>
-
-      {/* Archive toggle */}
-      <div className={styles.fieldToggle}>
-        <button
-          type="button"
-          className={`${styles.toggleBtn} ${showArchived ? styles.toggleBtnActive : ''}`}
-          aria-label={showArchived ? 'Show active notes' : 'Show archived notes'}
-          aria-pressed={showArchived}
-          onClick={onToggleArchived}
-        >
-          <Archive size={14} aria-hidden="true" />
-          {showArchived ? 'Active notes' : 'Archived notes'}
-        </button>
-      </div>
-
-      {/* Trash toggle */}
-      <div className={styles.fieldToggle}>
-        <button
-          type="button"
-          className={`${styles.toggleBtn} ${showTrash ? styles.toggleBtnActive : ''}`}
-          aria-label={showTrash ? 'Show active notes' : 'Show trash'}
-          aria-pressed={showTrash}
-          onClick={onToggleTrash}
-        >
-          <Trash2 size={14} aria-hidden="true" />
-          {showTrash ? 'Active notes' : 'Trash'}
-        </button>
-      </div>
 
       {/* Clickable tag chips — colored, and toggle the tag filter on click */}
       {tags.length > 0 && (
