@@ -3,28 +3,37 @@
  * All values reference design-system tokens; no magic numbers.
  */
 
-/* ── Backdrop ─────────────────────────────────────────────────── */
+/* ── Overlay (full-viewport container) ────────────────────────── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: var(--space-4);
+  box-sizing: border-box;
+}
+
+/* ── Backdrop (dismissable click target behind the panel) ─────── */
 
 .backdrop {
   position: fixed;
   inset: 0;
   background-color: rgb(0 0 0 / 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  max-width: none;
-  max-height: none;
-  width: 100%;
-  height: 100%;
   border: none;
-  padding: var(--space-4);
-  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  z-index: 0;
 }
 
 /* ── Dialog panel ─────────────────────────────────────────────── */
 
 .dialog {
+  position: relative;
+  z-index: 1;
   background-color: var(--color-surface);
   border: 1px solid var(--color-surface-border);
   border-radius: var(--radius-md);
@@ -86,7 +95,7 @@
 /* ── Responsive overrides — ≤ 480 px ─────────────────────────── */
 
 @media (max-width: 480px) {
-  .backdrop {
+  .overlay {
     padding: var(--space-2);
   }
 

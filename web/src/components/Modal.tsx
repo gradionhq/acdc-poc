@@ -2,8 +2,13 @@ import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react'
 import { X } from 'lucide-react';
 import styles from './Modal.module.css';
 
+export interface ModalRenderProps {
+  /** The DOM id assigned to the dialog's accessible label (its heading). */
+  readonly titleId: string;
+}
+
 export interface ModalProps {
-  /** Accessible dialog heading, shown at the top and used as the dialog's label. */
+  /** Accessible dialog heading, shown in the default header and used as the dialog's label. */
   readonly title: string;
   /**
    * Called when the user dismisses the dialog via the close button, the
@@ -20,17 +25,34 @@ export interface ModalProps {
    * to the first focusable element in the dialog.
    */
   readonly initialFocusRef?: RefObject<HTMLElement>;
+  /** Overrides the testid on the dismissable backdrop. Defaults to "modal-backdrop". */
+  readonly backdropTestId?: string;
+  /**
+   * Custom header content rendered in place of the default title + close
+   * button. Receives the `titleId` so the supplied heading can wire up
+   * `aria-labelledby`. When provided, the default close button is not rendered;
+   * the consumer is responsible for any dismiss affordance inside the body.
+   */
+  readonly renderHeader?: (props: ModalRenderProps) => ReactNode;
+  /** Extra class applied to the dialog panel, composed with the base panel style. */
+  readonly panelClassName?: string;
+  /** When false, the default body wrapper padding is omitted. Defaults to true. */
+  readonly padBody?: boolean;
 }
+
+const FOCUSABLE_SELECTOR = 'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])';
 
 /**
  * Accessible modal dialog primitive implementing the ARIA APG modal pattern.
  *
- * Uses the native `<dialog>` element so the browser supplies `role="dialog"`
- * and `aria-modal` semantics. Provides:
- * - `aria-labelledby` pointing at the visible heading.
- * - Focus moved into the dialog on open (first focusable element).
+ * Renders an overlay containing the dialog panel. The panel carries
+ * `role="dialog"` + `aria-modal` semantics and `aria-labelledby` pointing at
+ * the heading. The dismissable backdrop is a real `<button>` so its click
+ * handler lives on an interactive element. Provides:
+ * - Focus moved into the dialog on open (initialFocusRef or first focusable).
  * - A focus trap: Tab/Shift+Tab cycle within the dialog panel.
- * - Escape closes (the event is stopped so it does not reach global handlers).
+ * - Escape closes (handled at the document level; the event is stopped so it
+ *   does not also reach global shortcut handlers).
  * - Backdrop click closes.
  *
  * Focus restoration to the triggering element is the caller's responsibility
@@ -42,32 +64,43 @@ export function Modal({
   children,
   closeLabel = 'Close dialog',
   initialFocusRef,
+  backdropTestId = 'modal-backdrop',
+  renderHeader,
+  panelClassName,
+  padBody = true,
 }: ModalProps) {
   const titleId = useId();
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Move focus into the dialog when it opens. Prefer the caller-provided target;
   // otherwise focus the first focusable element.
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
+    const panel = panelRef.current;
+    if (!panel) return;
     if (initialFocusRef?.current) {
       initialFocusRef.current.focus();
       return;
     }
-    const focusable = dialog.querySelector<HTMLElement>(
-      'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])',
-    );
-    focusable?.focus();
+    panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
   }, [initialFocusRef]);
 
-  // Trap Tab/Shift+Tab focus within the dialog.
+  // Trap Tab/Shift+Tab focus within the dialog and close on Escape. Both are
+  // handled at the document level so the dialog panel stays a non-interactive
+  // container with no event listeners of its own.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key !== 'Tab' || !dialogRef.current) return;
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])',
-      );
+      const panel = panelRef.current;
+      if (!panel) return;
+      if (e.key === 'Escape') {
+        // Stop the event from reaching the global document-level shortcut
+        // handler so it does not also act on the Escape (e.g. blurring the
+        // trigger that onClose re-focuses).
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusable = panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
@@ -81,56 +114,51 @@ export function Modal({
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [onClose]);
 
-  /**
-   * Dismiss when the user clicks outside the inner panel. The native `<dialog>`
-   * fills the viewport, so a click whose target is the `<dialog>` itself means
-   * the user clicked the backdrop area rather than the panel content.
-   */
-  function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>) {
-    if (e.target === dialogRef.current) {
-      onClose();
-    }
-  }
+  const panelClass = panelClassName ? `${styles.dialog} ${panelClassName}` : styles.dialog;
 
   return (
-    // The native <dialog> renders with role="dialog" and is a recognised
-    // interactive element, so click + keyboard handlers are valid here.
-    <dialog
-      ref={dialogRef}
-      aria-modal="true"
-      aria-labelledby={titleId}
-      className={styles.backdrop}
-      data-testid="modal-backdrop"
-      onClick={handleBackdropClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          // Stop the event from reaching the global document-level shortcut
-          // handler so it does not also act on the Escape (e.g. blurring the
-          // trigger that onClose re-focuses).
-          e.stopPropagation();
-          onClose();
-        }
-      }}
-      open
-    >
-      <div className={styles.dialog}>
-        <div className={styles.header}>
-          <h2 id={titleId} className={styles.title}>
-            {title}
-          </h2>
-          <button
-            type="button"
-            aria-label={closeLabel}
-            className={styles.closeButton}
-            onClick={onClose}
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </div>
-        <div className={styles.body}>{children}</div>
+    <div className={styles.overlay}>
+      {/*
+        The dismissable backdrop is a real interactive control rather than a
+        non-interactive <div> with a click handler, so it can be activated by
+        pointer and keyboard alike.
+      */}
+      <button
+        type="button"
+        aria-label="Dismiss dialog by clicking the overlay"
+        className={styles.backdrop}
+        data-testid={backdropTestId}
+        tabIndex={-1}
+        onClick={onClose}
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className={panelClass}
+      >
+        {renderHeader ? (
+          renderHeader({ titleId })
+        ) : (
+          <div className={styles.header}>
+            <h2 id={titleId} className={styles.title}>
+              {title}
+            </h2>
+            <button
+              type="button"
+              aria-label={closeLabel}
+              className={styles.closeButton}
+              onClick={onClose}
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
+        )}
+        <div className={padBody ? styles.body : undefined}>{children}</div>
       </div>
-    </dialog>
+    </div>
   );
 }
