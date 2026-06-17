@@ -13,6 +13,21 @@ Entry points: `src/app.ts` (`createApp` factory), `src/server.ts` (listen).
   `req.query`, or `req.params`.
 - Tests use Vitest + supertest under `test/`. Every behavior change needs a test.
 
+## Testing strategy (test pyramid)
+
+- **Default new tests to the cheapest layer that can prove the behavior**: a unit/
+  component test (web, Vitest + Testing Library) or an integration test (server,
+  Vitest + supertest). A behavior change normally gets a unit/component or
+  integration test — not an e2e test.
+- **e2e (Playwright) covers only core, critical user journeys end-to-end plus an
+  API/health smoke** — create · view/list · edit · delete → trash → restore ·
+  search/filter · basic tagging · core navigation across the app-shell views.
+  Keep the e2e suite small and fast.
+- **Do not add an e2e spec** unless it exercises a core journey not already
+  covered. Prefer extending an existing core spec over adding a new file; push
+  everything else (component states, validation, edge cases, styling, hooks)
+  down to unit/component or integration tests.
+
 ## Security expectations
 
 - Never build a filesystem path directly from client-supplied input.
