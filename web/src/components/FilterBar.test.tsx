@@ -1,26 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createRef } from 'react';
 import { FilterBar } from './FilterBar';
 import type { SortOrder, TagMode } from '../api';
 
 function renderFilterBar(overrides: Partial<Parameters<typeof FilterBar>[0]> = {}) {
-  const ref = createRef<HTMLInputElement>();
   const props = {
-    searchInput: '',
-    onSearchChange: vi.fn(),
     tagFilter: '',
     onTagFilterChange: vi.fn(),
     tagMode: 'or' as TagMode,
     onTagModeChange: vi.fn(),
     sort: 'newest' as SortOrder,
     onSortChange: vi.fn(),
-    showArchived: false,
-    onToggleArchived: vi.fn(),
-    showTrash: false,
-    onToggleTrash: vi.fn(),
-    searchInputRef: ref,
     ...overrides,
   };
   const result = render(<FilterBar {...props} />);
@@ -28,11 +19,6 @@ function renderFilterBar(overrides: Partial<Parameters<typeof FilterBar>[0]> = {
 }
 
 describe('FilterBar', () => {
-  it('renders a Search notes input accessible by aria-label', () => {
-    renderFilterBar();
-    expect(screen.getByRole('textbox', { name: /search notes/i })).toBeInTheDocument();
-  });
-
   it('renders a Filter by tag input accessible by aria-label', () => {
     renderFilterBar();
     expect(screen.getByRole('textbox', { name: /filter by tag/i })).toBeInTheDocument();
@@ -47,23 +33,6 @@ describe('FilterBar', () => {
     expect(screen.getByRole('option', { name: /title/i })).toBeInTheDocument();
   });
 
-  it('renders the archive toggle button with "Show archived notes" label when not archived', () => {
-    renderFilterBar({ showArchived: false });
-    expect(screen.getByRole('button', { name: /show archived notes/i })).toBeInTheDocument();
-  });
-
-  it('renders the archive toggle button with "Show active notes" label when archived', () => {
-    renderFilterBar({ showArchived: true });
-    expect(screen.getByRole('button', { name: /show active notes/i })).toBeInTheDocument();
-  });
-
-  it('calls onSearchChange when typing in the search input', async () => {
-    const onSearchChange = vi.fn();
-    renderFilterBar({ onSearchChange });
-    await userEvent.type(screen.getByRole('textbox', { name: /search notes/i }), 'foo');
-    expect(onSearchChange).toHaveBeenCalled();
-  });
-
   it('calls onTagFilterChange when typing in the tag filter input', async () => {
     const onTagFilterChange = vi.fn();
     renderFilterBar({ onTagFilterChange });
@@ -76,34 +45,6 @@ describe('FilterBar', () => {
     renderFilterBar({ onSortChange });
     await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort notes/i }), 'oldest');
     expect(onSortChange).toHaveBeenCalledWith('oldest');
-  });
-
-  it('calls onToggleArchived when the archive toggle is clicked', async () => {
-    const onToggleArchived = vi.fn();
-    renderFilterBar({ onToggleArchived });
-    await userEvent.click(screen.getByRole('button', { name: /show archived notes/i }));
-    expect(onToggleArchived).toHaveBeenCalledTimes(1);
-  });
-
-  it('archive toggle button shows aria-pressed=true when archived view is active', () => {
-    renderFilterBar({ showArchived: true });
-    expect(screen.getByRole('button', { name: /show active notes/i })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-  });
-
-  it('archive toggle button shows aria-pressed=false when active view is default', () => {
-    renderFilterBar({ showArchived: false });
-    expect(screen.getByRole('button', { name: /show archived notes/i })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
-  });
-
-  it('reflects controlled value in search input', () => {
-    renderFilterBar({ searchInput: 'hello' });
-    expect(screen.getByRole('textbox', { name: /search notes/i })).toHaveValue('hello');
   });
 
   it('reflects controlled value in tag filter input', () => {

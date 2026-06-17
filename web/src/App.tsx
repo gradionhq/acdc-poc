@@ -32,11 +32,14 @@ import {
 } from './api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ToastContainer } from './ToastContainer';
+import { TagManager } from './TagManager';
 import { useTheme } from './useTheme';
 import { useToast } from './useToast';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
+import { AppShell } from './components/AppShell';
 import { FilterBar } from './components/FilterBar';
-import { Header } from './components/Header';
+import { HeaderBar } from './components/HeaderBar';
+import { Sidebar, type AppView } from './components/Sidebar';
 import { NoteComposer } from './components/NoteComposer';
 import { NoteList } from './components/NoteList';
 import { Pagination } from './components/Pagination';
@@ -80,7 +83,8 @@ function parseTags(raw: string): string[] {
 export function App() {
   const { theme, toggleTheme } = useTheme();
   const { toasts, addToast, dismissToast } = useToast();
-  const [showTagManager, setShowTagManager] = useState(false);
+  /** The active main view, switched from the sidebar navigation. */
+  const [view, setView] = useState<AppView>('all');
   const [notes, setNotes] = useState<Note[]>([]);
   /** All tags in use with their colors — drives chip colors and the filter row. */
   const [tags, setTags] = useState<TagStat[]>([]);
@@ -100,8 +104,6 @@ export function App() {
   const [query, setQuery] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [tagMode, setTagMode] = useState<TagMode>('or');
-  const [showArchived, setShowArchived] = useState(false);
-  const [showTrash, setShowTrash] = useState(false);
   const [trashedNotes, setTrashedNotes] = useState<Note[]>([]);
   const [sort, setSort] = useState<SortOrder>('newest');
   /** Flat list of existing tag names for the autocomplete suggestion list. */
@@ -153,6 +155,11 @@ export function App() {
   const skipDebouncePageResetRef = useRef(false);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // The view booleans the data layer reasons about, derived from `view`.
+  const showArchived = view === 'archived';
+  const showTrash = view === 'trash';
+  const showTagManager = view === 'tags';
 
   /** Parse a comma-separated tag filter string into a trimmed, non-empty, deduplicated tag list. */
   function parseTagFilter(raw: string): string[] {
@@ -222,7 +229,7 @@ export function App() {
       void refresh(page, query, tagFilter, sort, showArchived, tagMode);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, query, tagFilter, sort, showArchived, showTrash, tagMode]);
+  }, [page, query, tagFilter, sort, view, tagMode]);
 
   // Loaded once on mount (and refreshed after mutations); kept separate from the
   // notes refresh so it never blocks or interferes with the primary list load.
@@ -655,125 +662,146 @@ export function App() {
   const displayedNotes = showTrash ? trashedNotes : notes;
   const showEmptyState = !initialLoading && !error && displayedNotes.length === 0;
 
+  /**
+   * Switch the active main view. Always returns to page 1 and cancels any
+   * in-progress inline edit so the new view starts from a clean state.
+   */
+  function onSelectView(next: AppView) {
+    if (next === view) return;
+    setPage(1);
+    setEditingId(null);
+    setView(next);
+  }
+
+  /** Re-fetch notes and tag metadata after the tag manager mutates tags. */
+  function onTagsChanged() {
+    void refresh(page, query, tagFilter);
+    void refreshTags();
+    void refreshTagSuggestions();
+  }
+
+  const errorBanner = error && (
+    <div role="alert" className={styles.errorBanner}>
+      <span className={styles.errorMessage}>{error}</span>
+      <Button variant="danger" onClick={() => void refresh()} aria-label="Retry">
+        Retry
+      </Button>
+    </div>
+  );
+
+  const noteList = (
+    <NoteList
+      notes={displayedNotes}
+      tagColors={tagColors}
+      initialLoading={initialLoading}
+      isFilterActive={isFilterActive}
+      showEmptyState={showEmptyState}
+      editingId={editingId}
+      editTitle={editTitle}
+      editBody={editBody}
+      editTagsInput={editTagsInput}
+      editColor={editColor}
+      onEditTitleChange={setEditTitle}
+      onEditBodyChange={setEditBody}
+      onEditTagsInputChange={setEditTagsInput}
+      onEditColorChange={setEditColor}
+      onEditSave={(id) => void onEditSave(id)}
+      onEditCancel={onEditCancel}
+      onEditStart={onEditStart}
+      onTogglePin={(id, pinned) => void onTogglePin(id, pinned)}
+      onToggleArchive={(id, archived) => void onToggleArchive(id, archived)}
+      onDeleteRequest={onDeleteRequest}
+      onDuplicate={(id) => void onDuplicate(id)}
+      onRestore={(id) => void onRestore(id)}
+      onPermanentDeleteRequest={onPermanentDeleteRequest}
+      attachments={attachments}
+      attachmentsOpen={attachmentsOpen}
+      uploadError={uploadError}
+      dragOver={dragOver}
+      onToggleAttachments={(id) => void onToggleAttachments(id)}
+      onUploadFile={onUploadFile}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDeleteAttachment={onDeleteAttachment}
+      newNoteTitleRef={newNoteTitleRef}
+    />
+  );
+
+  const pagination = (
+    <Pagination
+      page={page}
+      totalPages={totalPages}
+      onPrev={() => setPage((p) => p - 1)}
+      onNext={() => setPage((p) => p + 1)}
+    />
+  );
+
   return (
-    <main className={styles.page}>
-      <Header
-        theme={theme}
-        toggleTheme={toggleTheme}
-        showHelp={showHelp}
-        onToggleHelp={() => setShowHelp((prev) => !prev)}
-        onCloseHelp={() => setShowHelp(false)}
-        showTagManager={showTagManager}
-        onToggleTagManager={() => setShowTagManager((v) => !v)}
-        onTagsChanged={() => {
-          void refresh(page, query, tagFilter);
-          void refreshTags();
-          void refreshTagSuggestions();
-        }}
-        helpToggleRef={helpToggleRef}
-        helpCloseBtnRef={helpCloseBtnRef}
-      />
+    <AppShell
+      header={
+        <HeaderBar
+          theme={theme}
+          toggleTheme={toggleTheme}
+          searchInput={searchInput}
+          onSearchChange={setSearchInput}
+          searchInputRef={searchInputRef}
+          onNewNote={shortcutHandlers.onNewNote}
+          showHelp={showHelp}
+          onToggleHelp={() => setShowHelp((prev) => !prev)}
+          onCloseHelp={() => setShowHelp(false)}
+          helpToggleRef={helpToggleRef}
+          helpCloseBtnRef={helpCloseBtnRef}
+        />
+      }
+      sidebar={<Sidebar view={view} onSelectView={onSelectView} />}
+    >
+      {errorBanner}
 
-      {error && (
-        <div role="alert" className={styles.errorBanner}>
-          <span className={styles.errorMessage}>{error}</span>
-          <Button variant="danger" onClick={() => void refresh()} aria-label="Retry">
-            Retry
-          </Button>
-        </div>
+      {showTagManager ? (
+        <TagManager onChanged={onTagsChanged} />
+      ) : (
+        <>
+          <FilterBar
+            tagFilter={tagFilter}
+            onTagFilterChange={(value) => {
+              setPage(1);
+              setTagFilter(value);
+            }}
+            tagMode={tagMode}
+            onTagModeChange={(mode) => {
+              setPage(1);
+              setTagMode(mode);
+            }}
+            sort={sort}
+            onSortChange={(s) => {
+              setPage(1);
+              setSort(s);
+            }}
+            tags={tags}
+          />
+
+          {view === 'all' && (
+            <NoteComposer
+              title={title}
+              onTitleChange={setTitle}
+              body={body}
+              onBodyChange={setBody}
+              tagsInput={tagsInput}
+              onTagsInputChange={setTagsInput}
+              tagSuggestions={tagSuggestions}
+              color={color}
+              onColorChange={setColor}
+              onSubmit={onSubmit}
+              newNoteTitleRef={newNoteTitleRef}
+            />
+          )}
+
+          {noteList}
+
+          {pagination}
+        </>
       )}
-
-      <FilterBar
-        searchInput={searchInput}
-        onSearchChange={setSearchInput}
-        tagFilter={tagFilter}
-        onTagFilterChange={(value) => {
-          setPage(1);
-          setTagFilter(value);
-        }}
-        tagMode={tagMode}
-        onTagModeChange={(mode) => {
-          setPage(1);
-          setTagMode(mode);
-        }}
-        sort={sort}
-        onSortChange={(s) => {
-          setPage(1);
-          setSort(s);
-        }}
-        showArchived={showArchived}
-        onToggleArchived={() => {
-          setPage(1);
-          setShowArchived((v) => !v);
-          setShowTrash(false);
-        }}
-        showTrash={showTrash}
-        onToggleTrash={() => {
-          setShowTrash((v) => !v);
-          setShowArchived(false);
-          setPage(1);
-        }}
-        searchInputRef={searchInputRef}
-        tags={tags}
-      />
-
-      <NoteComposer
-        title={title}
-        onTitleChange={setTitle}
-        body={body}
-        onBodyChange={setBody}
-        tagsInput={tagsInput}
-        onTagsInputChange={setTagsInput}
-        tagSuggestions={tagSuggestions}
-        color={color}
-        onColorChange={setColor}
-        onSubmit={onSubmit}
-        newNoteTitleRef={newNoteTitleRef}
-      />
-
-      <NoteList
-        notes={showTrash ? trashedNotes : notes}
-        tagColors={tagColors}
-        initialLoading={initialLoading}
-        isFilterActive={isFilterActive}
-        showEmptyState={showEmptyState}
-        editingId={editingId}
-        editTitle={editTitle}
-        editBody={editBody}
-        editTagsInput={editTagsInput}
-        editColor={editColor}
-        onEditTitleChange={setEditTitle}
-        onEditBodyChange={setEditBody}
-        onEditTagsInputChange={setEditTagsInput}
-        onEditColorChange={setEditColor}
-        onEditSave={(id) => void onEditSave(id)}
-        onEditCancel={onEditCancel}
-        onEditStart={onEditStart}
-        onTogglePin={(id, pinned) => void onTogglePin(id, pinned)}
-        onToggleArchive={(id, archived) => void onToggleArchive(id, archived)}
-        onDeleteRequest={onDeleteRequest}
-        onDuplicate={(id) => void onDuplicate(id)}
-        onRestore={(id) => void onRestore(id)}
-        onPermanentDeleteRequest={onPermanentDeleteRequest}
-        attachments={attachments}
-        attachmentsOpen={attachmentsOpen}
-        uploadError={uploadError}
-        dragOver={dragOver}
-        onToggleAttachments={(id) => void onToggleAttachments(id)}
-        onUploadFile={onUploadFile}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        onDeleteAttachment={onDeleteAttachment}
-        newNoteTitleRef={newNoteTitleRef}
-      />
-
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        onPrev={() => setPage((p) => p - 1)}
-        onNext={() => setPage((p) => p + 1)}
-      />
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       {pendingDeleteId !== null && (
@@ -794,6 +822,6 @@ export function App() {
           onCancel={onPermanentDeleteCancel}
         />
       )}
-    </main>
+    </AppShell>
   );
 }

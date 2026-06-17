@@ -133,7 +133,7 @@ test('restore a trashed note: it disappears from trash and reappears in the main
   });
 
   // Switch back to the active list — note must reappear
-  await page.getByRole('button', { name: /^show active notes$/i }).click();
+  await page.getByRole('button', { name: /^show all notes$/i }).click();
   await waitForNotesListReady(page);
   const restoredItem = await findNoteItem(page, noteTitle);
   await expect(restoredItem).toBeVisible();
@@ -181,7 +181,7 @@ test('permanently delete a trashed note removes it entirely', async ({ page }) =
   // Switch to active list — note must not appear there either.
   // (We skip waitForNotesListReady here since the active list will be empty
   // and an empty <ul> may be considered "not visible" by Playwright.)
-  await page.getByRole('button', { name: /^show active notes$/i }).click();
+  await page.getByRole('button', { name: /^show all notes$/i }).click();
   // Brief settle time for the refetch to complete, then verify absence.
   await page.waitForTimeout(1500);
   await expect(page.getByRole('listitem').filter({ hasText: noteTitle })).toHaveCount(0, {
