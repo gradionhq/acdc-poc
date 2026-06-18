@@ -19,6 +19,8 @@ npm run dev
 
 Open the URL printed by Vite (default: http://localhost:5173). The dev server proxies `/api` requests to the Express backend, which starts automatically on port 3000.
 
+`npm run dev` seeds the in-memory store with a varied sample dataset so the app starts full of data to explore. Seeding is **dev-only**: it runs only when `SEED=1` is set _and_ `NODE_ENV` is neither `production` nor `test`, and only when the store is empty (idempotent). `npm start` / production and every test runner (unit, integration, e2e) never seed. To boot the API without sample data, run the server directly without the flag (e.g. `tsx server/src/server.ts`).
+
 ---
 
 ## Scripts
