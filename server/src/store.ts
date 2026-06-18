@@ -421,4 +421,30 @@ export class NoteStore {
       .filter((n) => n.deletedAt !== null)
       .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
   }
+
+  /**
+   * Permanently remove every trashed note whose `deletedAt` is older than the
+   * retention window — i.e. notes trashed at or before `now - retentionMs`.
+   * Active and archived notes are never touched (only notes with a non-null
+   * `deletedAt` are considered). Each purged note's attachments are removed too
+   * (via {@link permanentDelete}). Returns the number of notes purged.
+   *
+   * @param retentionMs Retention window in milliseconds. A non-positive value
+   *   purges every trashed note immediately.
+   * @param now Reference timestamp (defaults to the current wall clock);
+   *   injectable so tests can drive the boundary deterministically.
+   */
+  purgeExpiredTrash(retentionMs: number, now: number = Date.now()): number {
+    const cutoff = now - retentionMs;
+    let purged = 0;
+    for (const [id, note] of this.notes.entries()) {
+      // Only trashed notes are eligible; active/archived notes are left intact.
+      if (note.deletedAt === null) continue;
+      if (note.deletedAt <= cutoff) {
+        this.permanentDelete(id);
+        purged += 1;
+      }
+    }
+    return purged;
+  }
 }
