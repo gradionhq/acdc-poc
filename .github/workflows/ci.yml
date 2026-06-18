@@ -7,11 +7,13 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   build-test-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -47,6 +49,6 @@ jobs:
               body: `🎥 **Proof-of-work**: Playwright report + video artifact for this run → ${run} (see the \`playwright-report\` artifact).`,
             });
       - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402 # v4
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
