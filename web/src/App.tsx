@@ -16,6 +16,8 @@ import {
   listNotes,
   listTrashedNotes,
   permanentDeleteNote,
+  rateLimitMessage,
+  RateLimitError,
   restoreNote,
   listTags,
   toggleArchive,
@@ -84,6 +86,21 @@ function parseTags(raw: string): string[] {
 export function App() {
   const { theme, toggleTheme } = useTheme();
   const { toasts, addToast, dismissToast } = useToast();
+
+  /**
+   * Surface an error as a non-blocking toast. A rate-limit (429) gets a
+   * friendly, Retry-After-aware message; any other failure uses `fallback`.
+   */
+  const notifyError = useCallback(
+    (e: unknown, fallback: string) => {
+      if (e instanceof RateLimitError) {
+        addToast(rateLimitMessage(e.retryAfterSeconds), 'error');
+      } else {
+        addToast(fallback, 'error');
+      }
+    },
+    [addToast],
+  );
   /** The active main view, switched from the sidebar navigation. */
   const [view, setView] = useState<AppView>('all');
   const [notes, setNotes] = useState<Note[]>([]);
@@ -349,7 +366,7 @@ export function App() {
         setPage(dest);
       }
     } catch (e: unknown) {
-      addToast('Failed to create note', 'error');
+      notifyError(e, 'Failed to create note');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
@@ -389,7 +406,7 @@ export function App() {
       void refreshTags();
       await refresh(page);
     } catch (e: unknown) {
-      addToast('Failed to update note', 'error');
+      notifyError(e, 'Failed to update note');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
@@ -417,6 +434,10 @@ export function App() {
       const metas = await listAttachments(id);
       setAttachments((prev) => ({ ...prev, [id]: metas }));
     } catch (err: unknown) {
+      if (err instanceof RateLimitError) {
+        addToast(rateLimitMessage(err.retryAfterSeconds), 'error');
+        return;
+      }
       setUploadError((prev) => ({
         ...prev,
         [id]: err instanceof Error ? err.message : 'An unexpected error occurred',
@@ -470,7 +491,7 @@ export function App() {
         }
       }
     } catch (e: unknown) {
-      addToast('Failed to toggle pin', 'error');
+      notifyError(e, 'Failed to toggle pin');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
@@ -490,7 +511,7 @@ export function App() {
         setPage(newPage);
       }
     } catch (e) {
-      addToast('Failed to toggle archive', 'error');
+      notifyError(e, 'Failed to toggle archive');
       setError(String(e));
     }
   }
@@ -541,7 +562,7 @@ export function App() {
         setPage(newPage);
       }
     } catch (e: unknown) {
-      addToast('Failed to move note to trash', 'error');
+      notifyError(e, 'Failed to move note to trash');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
@@ -555,7 +576,7 @@ export function App() {
       await refreshTrash();
       void refreshTags();
     } catch (e: unknown) {
-      addToast('Failed to restore note', 'error');
+      notifyError(e, 'Failed to restore note');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
@@ -586,7 +607,7 @@ export function App() {
       addToast('Note permanently deleted', 'success');
       await refreshTrash();
     } catch (e: unknown) {
-      addToast('Failed to permanently delete note', 'error');
+      notifyError(e, 'Failed to permanently delete note');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }
@@ -621,7 +642,7 @@ export function App() {
         setPage(dest);
       }
     } catch (e: unknown) {
-      addToast('Failed to duplicate note', 'error');
+      notifyError(e, 'Failed to duplicate note');
       setError(e instanceof Error ? e.message : 'An unexpected error occurred');
     }
   }

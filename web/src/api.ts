@@ -48,6 +48,69 @@ function toNote(value: Record<string, unknown>): Note {
   };
 }
 
+/**
+ * Thrown when the server responds with HTTP 429 (Too Many Requests).
+ *
+ * Carries the parsed `Retry-After` hint (in seconds) when the server provided
+ * one, so the UI can tell the user how long to wait. `retryAfterSeconds` is
+ * `null` when the header is absent or not a usable non-negative number.
+ */
+export class RateLimitError extends Error {
+  readonly retryAfterSeconds: number | null;
+
+  constructor(retryAfterSeconds: number | null) {
+    super('rate limited');
+    this.name = 'RateLimitError';
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+/**
+ * Parse a `Retry-After` header value into a non-negative whole number of
+ * seconds. Supports the delta-seconds form (e.g. `"30"`) and the HTTP-date
+ * form (e.g. `"Wed, 21 Oct 2026 07:28:00 GMT"`), rounding the date form up to
+ * the next whole second relative to now. Returns `null` when the value is
+ * missing or cannot be interpreted.
+ */
+function parseRetryAfter(value: string | null): number | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  // delta-seconds form
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return Number.isFinite(seconds) ? seconds : null;
+  }
+  // HTTP-date form
+  const when = Date.parse(trimmed);
+  if (Number.isNaN(when)) return null;
+  const deltaMs = when - Date.now();
+  return deltaMs > 0 ? Math.ceil(deltaMs / 1000) : 0;
+}
+
+/**
+ * Throw a {@link RateLimitError} when the response is a 429. Call this at the
+ * top of every `!res.ok` branch so rate limiting is surfaced uniformly across
+ * the API client, ahead of the endpoint-specific error message.
+ */
+function assertNotRateLimited(res: Response): void {
+  if (res.status === 429) {
+    throw new RateLimitError(parseRetryAfter(res.headers.get('Retry-After')));
+  }
+}
+
+/**
+ * Build a friendly, non-technical message for a rate-limit (429) response,
+ * incorporating the `Retry-After` hint when one was provided.
+ */
+export function rateLimitMessage(retryAfterSeconds: number | null): string {
+  if (retryAfterSeconds !== null && retryAfterSeconds > 0) {
+    const unit = retryAfterSeconds === 1 ? 'second' : 'seconds';
+    return `Too many requests. Please try again in ${retryAfterSeconds} ${unit}.`;
+  }
+  return 'Too many requests. Please slow down and try again shortly.';
+}
+
 export interface NotesPage {
   notes: Note[];
   total: number;
@@ -89,7 +152,10 @@ export async function listNotes(
     }
   }
   const res = await fetch(`${base}?${params.toString()}`);
-  if (!res.ok) throw new Error('failed to load notes');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to load notes');
+  }
   const raw = Number(res.headers.get('X-Total-Count'));
   const total = Number.isFinite(raw) && raw >= 0 ? raw : 0;
   const rawNotes = (await res.json()) as Record<string, unknown>[];
@@ -108,7 +174,10 @@ export async function createNote(input: {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
   });
-  if (!res.ok) throw new Error('failed to create note');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to create note');
+  }
   const created: unknown = await res.json();
   if (!isRawNote(created)) throw new Error('invalid note payload');
   return toNote(created);
@@ -123,7 +192,10 @@ export async function updateNote(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(input),
   });
-  if (!res.ok) throw new Error('failed to update note');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to update note');
+  }
   const updated: unknown = await res.json();
   if (!isRawNote(updated)) throw new Error('invalid note payload');
   return toNote(updated);
@@ -135,13 +207,19 @@ export async function updateNote(
  */
 export async function deleteNote(id: string): Promise<void> {
   const res = await fetch(`${base}/${id}`, { method: 'DELETE' });
-  if (!res.ok && res.status !== 404) throw new Error('failed to delete note');
+  if (!res.ok && res.status !== 404) {
+    assertNotRateLimited(res);
+    throw new Error('failed to delete note');
+  }
 }
 
 /** Restore a trashed note back to the active list. */
 export async function restoreNote(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/restore`, { method: 'PATCH' });
-  if (!res.ok) throw new Error('failed to restore note');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to restore note');
+  }
   const updated: unknown = await res.json();
   if (!isRawNote(updated)) throw new Error('invalid note payload');
   return toNote(updated);
@@ -150,13 +228,19 @@ export async function restoreNote(id: string): Promise<Note> {
 /** Permanently remove a note from the store (irreversible). */
 export async function permanentDeleteNote(id: string): Promise<void> {
   const res = await fetch(`${base}/${id}/permanent`, { method: 'DELETE' });
-  if (!res.ok && res.status !== 404) throw new Error('failed to permanently delete note');
+  if (!res.ok && res.status !== 404) {
+    assertNotRateLimited(res);
+    throw new Error('failed to permanently delete note');
+  }
 }
 
 /** List all trashed notes, sorted by most-recently trashed first. */
 export async function listTrashedNotes(): Promise<Note[]> {
   const res = await fetch(`${base}/trash`);
-  if (!res.ok) throw new Error('failed to load trash');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to load trash');
+  }
   const data: unknown = await res.json();
   if (!Array.isArray(data) || !data.every(isRawNote)) {
     throw new Error('invalid trash payload');
@@ -166,7 +250,10 @@ export async function listTrashedNotes(): Promise<Note[]> {
 
 export async function duplicateNote(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/duplicate`, { method: 'POST' });
-  if (!res.ok) throw new Error('failed to duplicate note');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to duplicate note');
+  }
   const created: unknown = await res.json();
   if (!isRawNote(created)) throw new Error('invalid note payload');
   return toNote(created);
@@ -174,7 +261,10 @@ export async function duplicateNote(id: string): Promise<Note> {
 
 export async function togglePin(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/pin`, { method: 'PATCH' });
-  if (!res.ok) throw new Error('failed to toggle pin');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to toggle pin');
+  }
   const updated: unknown = await res.json();
   if (!isRawNote(updated)) throw new Error('invalid note payload');
   return toNote(updated);
@@ -182,7 +272,10 @@ export async function togglePin(id: string): Promise<Note> {
 
 export async function toggleArchive(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/archive`, { method: 'PATCH' });
-  if (!res.ok) throw new Error('failed to toggle archive');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to toggle archive');
+  }
   const updated: unknown = await res.json();
   if (!isRawNote(updated)) throw new Error('invalid note payload');
   return toNote(updated);
@@ -209,6 +302,7 @@ export async function uploadAttachment(noteId: string, file: File): Promise<Atta
   form.append('file', file);
   const res = await fetch(`${base}/${noteId}/attachments`, { method: 'POST', body: form });
   if (!res.ok) {
+    assertNotRateLimited(res);
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(payload.error ?? 'failed to upload attachment');
   }
@@ -229,6 +323,7 @@ export async function uploadAttachments(noteId: string, files: File[]): Promise<
   }
   const res = await fetch(`${base}/${noteId}/attachments`, { method: 'POST', body: form });
   if (!res.ok) {
+    assertNotRateLimited(res);
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(payload.error ?? 'failed to upload attachments');
   }
@@ -241,7 +336,10 @@ export async function uploadAttachments(noteId: string, files: File[]): Promise<
 
 export async function listAttachments(noteId: string): Promise<AttachmentMeta[]> {
   const res = await fetch(`${base}/${noteId}/attachments`);
-  if (!res.ok) throw new Error('failed to load attachments');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to load attachments');
+  }
   const data: unknown = await res.json();
   if (!Array.isArray(data) || !data.every(isAttachmentMeta)) {
     throw new Error('invalid attachments payload');
@@ -257,7 +355,10 @@ export async function deleteAttachment(noteId: string, filename: string): Promis
   const res = await fetch(`${base}/${noteId}/attachments/${encodeURIComponent(filename)}`, {
     method: 'DELETE',
   });
-  if (!res.ok && res.status !== 404) throw new Error('failed to delete attachment');
+  if (!res.ok && res.status !== 404) {
+    assertNotRateLimited(res);
+    throw new Error('failed to delete attachment');
+  }
 }
 
 // ── Tag management ────────────────────────────────────────────────────────────
@@ -291,7 +392,10 @@ const tagsBase = '/api/tags';
 
 export async function listTags(): Promise<TagStat[]> {
   const res = await fetch(tagsBase);
-  if (!res.ok) throw new Error('failed to load tags');
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    throw new Error('failed to load tags');
+  }
   const data: unknown = await res.json();
   if (!Array.isArray(data) || !data.every(isTagStat)) {
     throw new Error('invalid tags payload');
@@ -306,6 +410,7 @@ export async function renameTag(from: string, to: string): Promise<{ affected: n
     body: JSON.stringify({ from, to }),
   });
   if (!res.ok) {
+    assertNotRateLimited(res);
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(payload.error ?? 'failed to rename tag');
   }
@@ -319,6 +424,7 @@ export async function setTagColor(tag: string, color: TagColor): Promise<TagStat
     body: JSON.stringify({ color }),
   });
   if (!res.ok) {
+    assertNotRateLimited(res);
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(payload.error ?? 'failed to set tag color');
   }
@@ -329,6 +435,7 @@ export async function setTagColor(tag: string, color: TagColor): Promise<TagStat
 export async function deleteTag(tag: string): Promise<{ affected: number }> {
   const res = await fetch(`${tagsBase}/${encodeURIComponent(tag)}`, { method: 'DELETE' });
   if (!res.ok) {
+    assertNotRateLimited(res);
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(payload.error ?? 'failed to delete tag');
   }
