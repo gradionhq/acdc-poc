@@ -11,8 +11,10 @@ export interface HeaderBarProps {
   searchInput: string;
   onSearchChange: (value: string) => void;
   searchInputRef: RefObject<HTMLInputElement>;
-  /** Invoked by the New-note action — focuses the composer. */
+  /** Invoked by the New-note action — opens the note composer modal. */
   onNewNote: () => void;
+  /** Ref to the New-note trigger button; focus returns here when the modal closes. */
+  newNoteTriggerRef?: RefObject<HTMLButtonElement>;
   showHelp: boolean;
   onToggleHelp: () => void;
   onCloseHelp: () => void;
@@ -32,6 +34,7 @@ export function HeaderBar({
   onSearchChange,
   searchInputRef,
   onNewNote,
+  newNoteTriggerRef,
   showHelp,
   onToggleHelp,
   onCloseHelp,
@@ -56,7 +59,7 @@ export function HeaderBar({
         </div>
 
         <div className={styles.actions}>
-          <Button variant="primary" onClick={onNewNote}>
+          <Button ref={newNoteTriggerRef} variant="primary" onClick={onNewNote}>
             <Plus size={15} aria-hidden="true" className={styles.btnIcon} />
             New note
           </Button>

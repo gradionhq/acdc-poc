@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from './components/Button';
+import { Modal } from './components/Modal';
 import styles from './ConfirmDialog.module.css';
 
 export interface ConfirmDialogProps {
@@ -21,19 +22,20 @@ export interface ConfirmDialogProps {
 /**
  * Accessible in-app confirmation dialog, implementing the ARIA APG modal dialog pattern.
  *
- * Uses the native `<dialog>` element so the browser supplies `role="dialog"`,
- * `aria-modal`, and built-in Escape handling automatically.
+ * Built on top of the {@link Modal} primitive, which supplies the single shared
+ * implementation of the dialog semantics, focus trap, Escape handling and
+ * dismissable backdrop. ConfirmDialog only contributes its destructive-action
+ * presentation (warning icon, message, confirm/cancel buttons).
  *
  * Accessibility properties:
- * - Native `<dialog>` element so screen readers treat it as a modal.
+ * - `role="dialog"` + `aria-modal` via the underlying Modal panel.
  * - `aria-labelledby` points at the visible heading.
- * - The cancel button receives `autoFocus` so focus moves into the dialog on mount.
+ * - The cancel button receives focus when the dialog opens (safe default).
  * - Focus is trapped within the dialog panel: Tab/Shift+Tab cycle between focusable
  *   elements without escaping into the page behind the backdrop.
- * - The Escape key closes the dialog (handled via `onKeyDown` on the dialog element).
+ * - The Escape key closes the dialog.
  * - Clicking the backdrop area (outside the panel) also cancels.
- * - Focus returns to the trigger element when the dialog closes (handled by the caller
- *   via `deleteTriggerRef`).
+ * - Focus returns to the trigger element when the dialog closes (handled by the caller).
  */
 export function ConfirmDialog({
   title,
@@ -43,82 +45,35 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const titleId = 'confirm-dialog-title';
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  // Trap Tab/Shift+Tab focus within the dialog.
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key !== 'Tab' || !dialogRef.current) return;
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  /**
-   * Dismiss the dialog when the user clicks outside the panel content.
-   * The native `<dialog>` element fills the viewport, so a click whose target
-   * is the `<dialog>` itself (i.e. the backdrop area) means the user clicked
-   * outside the inner panel div.
-   */
-  function handleBackdropClick(e: React.MouseEvent<HTMLDialogElement>) {
-    if (e.target === dialogRef.current) {
-      onCancel();
-    }
-  }
+  // Focus the (safe) cancel button when the dialog opens.
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   return (
-    // The native <dialog> element renders with role="dialog" and is a
-    // recognised interactive element, so click + keyboard handlers are valid.
-    <dialog
-      ref={dialogRef}
-      aria-modal="true"
-      aria-labelledby={titleId}
-      className={styles.backdrop}
-      data-testid="confirm-dialog-backdrop"
-      onClick={handleBackdropClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          // Stop the event from reaching the global document-level shortcut
-          // handler, which would blur the delete trigger that onCancel just
-          // re-focused.
-          e.stopPropagation();
-          onCancel();
-        }
-      }}
-      open
-    >
-      <div className={styles.dialog}>
+    <Modal
+      title={title}
+      onClose={onCancel}
+      initialFocusRef={cancelRef}
+      backdropTestId="confirm-dialog-backdrop"
+      panelClassName={styles.dialog}
+      padBody={false}
+      renderHeader={({ titleId }) => (
         <div className={styles.titleRow}>
           <AlertTriangle size={20} className={styles.warningIcon} aria-hidden="true" />
           <h2 id={titleId} className={styles.title}>
             {title}
           </h2>
         </div>
-        <p className={styles.message}>{message}</p>
-        <div className={styles.actions}>
-          {/* autoFocus moves focus into the dialog when it opens (cancel is safe default). */}
-          <Button variant="secondary" autoFocus onClick={onCancel}>
-            {cancelLabel}
-          </Button>
-          <Button variant="danger" onClick={onConfirm}>
-            {confirmLabel}
-          </Button>
-        </div>
+      )}
+    >
+      <p className={styles.message}>{message}</p>
+      <div className={styles.actions}>
+        <Button ref={cancelRef} variant="secondary" onClick={onCancel}>
+          {cancelLabel}
+        </Button>
+        <Button variant="danger" onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
       </div>
-    </dialog>
+    </Modal>
   );
 }

@@ -1,4 +1,4 @@
-import { test, expect, openOverflowMenu } from '../fixtures';
+import { test, expect, openOverflowMenu, createNote } from '../fixtures';
 
 test('create then delete a note via confirm dialog', async ({ page }) => {
   // Unique per run so a leftover note from an interrupted local re-run (the store
@@ -9,9 +9,7 @@ test('create then delete a note via confirm dialog', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
 
-  await page.getByLabel(/title/i).fill(title);
-  await page.getByLabel(/body/i).fill('proof of work');
-  await page.getByRole('button', { name: /add note/i }).click();
+  await createNote(page, title, 'proof of work');
 
   const item = page.getByRole('listitem').filter({ hasText: title });
   await expect(item).toBeVisible();
@@ -33,9 +31,7 @@ test('cancel in confirm dialog does not delete the note', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Notes' })).toBeVisible();
 
-  await page.getByLabel(/title/i).fill(title);
-  await page.getByLabel(/body/i).fill('should not be deleted');
-  await page.getByRole('button', { name: /add note/i }).click();
+  await createNote(page, title, 'should not be deleted');
 
   const item = page.getByRole('listitem').filter({ hasText: title });
   await expect(item).toBeVisible();

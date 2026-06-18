@@ -1,18 +1,4 @@
-import { test, expect } from '../fixtures';
-
-// Creates a note via the UI and waits for the form title input to clear,
-// confirming the server accepted the note before the test proceeds.
-async function createNote(
-  page: import('@playwright/test').Page,
-  title: string,
-  body: string,
-): Promise<void> {
-  const titleInput = page.getByLabel(/^title$/i);
-  await titleInput.fill(title);
-  await page.getByLabel(/^body$/i).fill(body);
-  await page.getByRole('button', { name: /add note/i }).click();
-  await expect(titleInput).toHaveValue('');
-}
+import { test, expect, createNote } from '../fixtures';
 
 test('search box filters notes by title and clears on empty query', async ({ page }) => {
   // A shared per-run token embedded in all three titles so a single search

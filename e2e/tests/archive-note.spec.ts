@@ -1,17 +1,4 @@
-import { test, expect } from '../fixtures';
-
-// Helper: create a note and wait for the form to reset (title cleared).
-async function createNote(
-  page: import('@playwright/test').Page,
-  title: string,
-  body: string,
-): Promise<void> {
-  const titleInput = page.getByLabel(/^title$/i);
-  await titleInput.fill(title);
-  await page.getByLabel(/^body$/i).fill(body);
-  await page.getByRole('button', { name: /add note/i }).click();
-  await expect(titleInput).toHaveValue('');
-}
+import { test, expect, createNote } from '../fixtures';
 
 // Wait for the active notes list to finish its async fetch. The skeleton is
 // only shown on the very first load; background refetches (e.g. after an

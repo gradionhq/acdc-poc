@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react';
+import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import styles from './Button.module.css';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'danger';
@@ -13,9 +13,15 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  *   • primary   – blue fill, used for affirmative / submit actions
  *   • secondary – gray fill, used for neutral / cancel actions
  *   • danger    – red fill, used for destructive actions
+ *
+ * Forwards its ref to the underlying <button> so callers can manage focus
+ * (e.g. restoring focus to a trigger when a dialog it opened closes).
  */
-export function Button({ variant = 'primary', className, ...rest }: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = 'primary', className, ...rest },
+  ref,
+) {
   const variantClass = styles[variant];
   const combined = [styles.btn, variantClass, className].filter(Boolean).join(' ');
-  return <button className={combined} {...rest} />;
-}
+  return <button ref={ref} className={combined} {...rest} />;
+});
