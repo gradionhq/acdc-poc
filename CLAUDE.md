@@ -45,8 +45,8 @@ Entry points: `src/app.ts` (`createApp` factory), `src/server.ts` (listen).
   Medium or above may remain on changed code before a change is considered done.
 - Maintain or increase test coverage on changed files.
 - **Duplication is a ratio, not a count.** `new_duplicated_lines_density` =
-  duplicated ÷ total new lines, so refactoring inherently-repetitive *data*
-  (seed fixtures, sample/test data) can make it *worse* by shrinking the
+  duplicated ÷ total new lines, so refactoring inherently-repetitive _data_
+  (seed fixtures, sample/test data) can make it _worse_ by shrinking the
   denominator. For dev-only data files, exempt them from copy-paste detection via
   `sonar.cpd.exclusions=<file>` in `sonar-project.properties` (CPD only — they are
   still analyzed for bugs/smells). Don't contort data to chase the percentage;
