@@ -19,8 +19,10 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     // start:prod (root) builds the SPA then boots Express serving web/dist.
-    // RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_MS are forwarded so the e2e suite
-    // can run with a custom window if needed.
+    // RATE_LIMIT_MAX / RATE_LIMIT_WINDOW_MS (the /api limiter) and
+    // STATIC_RATE_LIMIT_MAX / STATIC_RATE_LIMIT_WINDOW_MS (the SPA static +
+    // history-fallback limiter) are forwarded so the e2e suite can run with a
+    // custom window if needed.
     command: 'npm run start:prod --prefix ..',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
@@ -35,6 +37,10 @@ export default defineConfig({
       // should not exercise a low global limit that breaks other specs.
       RATE_LIMIT_MAX: process.env.RATE_LIMIT_MAX ?? '100000',
       RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS ?? '60000',
+      // Same for the SPA static / history-fallback limiter: a page load fans
+      // out into many asset requests, so keep the ceiling very high here.
+      STATIC_RATE_LIMIT_MAX: process.env.STATIC_RATE_LIMIT_MAX ?? '100000',
+      STATIC_RATE_LIMIT_WINDOW_MS: process.env.STATIC_RATE_LIMIT_WINDOW_MS ?? '60000',
     },
   },
 });

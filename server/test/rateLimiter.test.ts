@@ -5,8 +5,11 @@ import express, { type Request, type Response } from 'express';
 import {
   createRateLimiter,
   defaultOptions,
+  staticDefaultOptions,
   DEFAULT_RATE_LIMIT_MAX,
   DEFAULT_RATE_LIMIT_WINDOW_MS,
+  DEFAULT_STATIC_RATE_LIMIT_MAX,
+  DEFAULT_STATIC_RATE_LIMIT_WINDOW_MS,
   TEST_RATE_LIMIT_MAX,
 } from '../src/rateLimiter';
 
@@ -118,6 +121,55 @@ describe('rate limiter middleware', () => {
       } finally {
         process.env.NODE_ENV = original.env;
         if (original.max !== undefined) process.env.RATE_LIMIT_MAX = original.max;
+      }
+    });
+  });
+
+  describe('static limiter options (staticDefaultOptions)', () => {
+    it('reads STATIC_RATE_LIMIT_MAX and STATIC_RATE_LIMIT_WINDOW_MS', () => {
+      const original = {
+        max: process.env.STATIC_RATE_LIMIT_MAX,
+        win: process.env.STATIC_RATE_LIMIT_WINDOW_MS,
+      };
+      process.env.STATIC_RATE_LIMIT_MAX = '5000';
+      process.env.STATIC_RATE_LIMIT_WINDOW_MS = '30000';
+      try {
+        const opts = staticDefaultOptions();
+        expect(opts.max).toBe(5000);
+        expect(opts.windowMs).toBe(30_000);
+        expect(opts.exemptPaths).toEqual([]);
+      } finally {
+        if (original.max === undefined) delete process.env.STATIC_RATE_LIMIT_MAX;
+        else process.env.STATIC_RATE_LIMIT_MAX = original.max;
+        if (original.win === undefined) delete process.env.STATIC_RATE_LIMIT_WINDOW_MS;
+        else process.env.STATIC_RATE_LIMIT_WINDOW_MS = original.win;
+      }
+    });
+
+    it('uses a very high default under NODE_ENV=test so SPA/asset loads are not throttled', () => {
+      const original = { env: process.env.NODE_ENV, max: process.env.STATIC_RATE_LIMIT_MAX };
+      delete process.env.STATIC_RATE_LIMIT_MAX;
+      process.env.NODE_ENV = 'test';
+      try {
+        expect(staticDefaultOptions().max).toBe(TEST_RATE_LIMIT_MAX);
+      } finally {
+        process.env.NODE_ENV = original.env;
+        if (original.max !== undefined) process.env.STATIC_RATE_LIMIT_MAX = original.max;
+      }
+    });
+
+    it('uses a generous production default (well above the /api default)', () => {
+      const original = { env: process.env.NODE_ENV, max: process.env.STATIC_RATE_LIMIT_MAX };
+      delete process.env.STATIC_RATE_LIMIT_MAX;
+      process.env.NODE_ENV = 'production';
+      try {
+        const opts = staticDefaultOptions();
+        expect(opts.max).toBe(DEFAULT_STATIC_RATE_LIMIT_MAX);
+        expect(opts.windowMs).toBe(DEFAULT_STATIC_RATE_LIMIT_WINDOW_MS);
+        expect(opts.max).toBeGreaterThan(DEFAULT_RATE_LIMIT_MAX);
+      } finally {
+        process.env.NODE_ENV = original.env;
+        if (original.max !== undefined) process.env.STATIC_RATE_LIMIT_MAX = original.max;
       }
     });
   });

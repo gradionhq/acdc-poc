@@ -9,7 +9,7 @@ import { createTagsRouter } from './tags.js';
 import { createHealthRouter } from './health.js';
 import { createOpenApiRouter } from './openapi.js';
 import { requestLogger } from './logger.js';
-import { createRateLimiter } from './rateLimiter.js';
+import { createRateLimiter, createStaticRateLimiter } from './rateLimiter.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // dist/src/app.js → ../../../web/dist  ;  src/app.ts (tsx dev) → ../../web/dist
@@ -70,8 +70,26 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
 
   // Static SPA + history fallback (only when a build exists).
   if (fs.existsSync(webDist)) {
-    app.use(express.static(webDist));
-    app.get('*', (_req: Request, res: Response) => res.sendFile(path.join(webDist, 'index.html')));
+    mountSpa(app, webDist);
   }
   return app;
+}
+
+/**
+ * Mount the SPA static-asset server and the history-fallback route.
+ *
+ * Both handlers touch the filesystem, so both are guarded by a dedicated,
+ * generous rate limiter ({@link createStaticRateLimiter}) — a separate budget
+ * from `/api` so capping abuse here never throttles legitimate API traffic.
+ * The ceiling is high (and effectively disabled under `NODE_ENV=test`) because
+ * one page load fans out into many asset requests; it only caps pathological
+ * abuse of the filesystem-backed handlers. Exported so it can be exercised
+ * against a fixture build in unit tests without a real `web/dist`.
+ */
+export function mountSpa(app: Express, webDist: string): void {
+  // One limiter, mounted once, so each HTTP request counts a single time
+  // before reaching either the static-asset handler or the history-fallback.
+  app.use(createStaticRateLimiter());
+  app.use(express.static(webDist));
+  app.get('*', (_req: Request, res: Response) => res.sendFile(path.join(webDist, 'index.html')));
 }

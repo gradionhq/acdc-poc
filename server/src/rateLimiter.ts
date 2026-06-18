@@ -16,6 +16,18 @@ export const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 export const TEST_RATE_LIMIT_MAX = 1_000_000;
 
 /**
+ * Default limiter values for the SPA static / history-fallback path. Tunable
+ * via STATIC_RATE_LIMIT_MAX / STATIC_RATE_LIMIT_WINDOW_MS.
+ *
+ * A single SPA page load fans out into many static-asset requests (JS/CSS/img),
+ * so this ceiling is deliberately far higher than the /api default of
+ * {@link DEFAULT_RATE_LIMIT_MAX} — it only exists to cap pathological abuse of
+ * the filesystem-backed handlers, never to throttle real navigations.
+ */
+export const DEFAULT_STATIC_RATE_LIMIT_MAX = 2_000;
+export const DEFAULT_STATIC_RATE_LIMIT_WINDOW_MS = 60_000;
+
+/**
  * Options controlling the rate limiter behaviour.
  */
 export interface RateLimiterOptions {
@@ -51,6 +63,34 @@ export function defaultOptions(): RateLimiterOptions {
     windowMs: readEnvInt('RATE_LIMIT_WINDOW_MS', DEFAULT_RATE_LIMIT_WINDOW_MS),
     exemptPaths: ['/health'],
   };
+}
+
+/**
+ * Build the default options for the SPA static / history-fallback limiter,
+ * resolving values from STATIC_RATE_LIMIT_MAX / STATIC_RATE_LIMIT_WINDOW_MS.
+ *
+ * Mirrors {@link defaultOptions}: under `NODE_ENV=test` the `max` is raised to
+ * {@link TEST_RATE_LIMIT_MAX} (unless `STATIC_RATE_LIMIT_MAX` is explicitly set)
+ * so the server suites and the Playwright e2e server — which load the SPA plus
+ * many assets — are never throttled. There are no exempt paths.
+ */
+export function staticDefaultOptions(): RateLimiterOptions {
+  const baseMax =
+    process.env.NODE_ENV === 'test' ? TEST_RATE_LIMIT_MAX : DEFAULT_STATIC_RATE_LIMIT_MAX;
+  return {
+    max: readEnvInt('STATIC_RATE_LIMIT_MAX', baseMax),
+    windowMs: readEnvInt('STATIC_RATE_LIMIT_WINDOW_MS', DEFAULT_STATIC_RATE_LIMIT_WINDOW_MS),
+    exemptPaths: [],
+  };
+}
+
+/**
+ * Create the per-IP limiter for the SPA static / history-fallback path, seeded
+ * from {@link staticDefaultOptions}. Behaves identically to
+ * {@link createRateLimiter}; only the default ceiling differs.
+ */
+export function createStaticRateLimiter(opts: Partial<RateLimiterOptions> = {}): RequestHandler {
+  return createRateLimiter({ ...staticDefaultOptions(), ...opts });
 }
 
 /**
