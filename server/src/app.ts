@@ -10,6 +10,7 @@ import { createHealthRouter } from './health.js';
 import { createOpenApiRouter } from './openapi.js';
 import { requestLogger } from './logger.js';
 import { createRateLimiter, createStaticRateLimiter } from './rateLimiter.js';
+import { createSecurityMiddleware } from './security.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // dist/src/app.js → ../../../web/dist  ;  src/app.ts (tsx dev) → ../../web/dist
@@ -19,6 +20,10 @@ const webDist = fs.existsSync(path.join(here, '../../../web/dist'))
 
 export function createApp(store: NoteStore = new NoteStore()): Express {
   const app = express();
+
+  // Security headers (Helmet + SPA-aware CSP) on every response. Mounted first
+  // so the headers are present on API, static-asset and error responses alike.
+  app.use(createSecurityMiddleware());
 
   // Request logging (quiet in test env).
   app.use(requestLogger);
