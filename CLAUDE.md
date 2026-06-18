@@ -27,6 +27,11 @@ Entry points: `src/app.ts` (`createApp` factory), `src/server.ts` (listen).
   covered. Prefer extending an existing core spec over adding a new file; push
   everything else (component states, validation, edge cases, styling, hooks)
   down to unit/component or integration tests.
+- **Verify with the commands CI runs, not the convenient ones.** CI runs
+  `test:cov` (Vitest with coverage); coverage instrumentation changes timing and
+  has surfaced real races that bare `vitest run` hid. Before pushing, run
+  `npm run test:cov` (server + web) and the e2e suite with `CI=1`. "Green on
+  `npm test`" is not "green in CI."
 
 ## Security expectations
 
@@ -39,3 +44,11 @@ Entry points: `src/app.ts` (`createApp` factory), `src/server.ts` (listen).
 - The SonarQube quality gate must pass and no new issues of severity
   Medium or above may remain on changed code before a change is considered done.
 - Maintain or increase test coverage on changed files.
+- **Duplication is a ratio, not a count.** `new_duplicated_lines_density` =
+  duplicated ÷ total new lines, so refactoring inherently-repetitive _data_
+  (seed fixtures, sample/test data) can make it _worse_ by shrinking the
+  denominator. For dev-only data files, exempt them from copy-paste detection via
+  `sonar.cpd.exclusions=<file>` in `sonar-project.properties` (CPD only — they are
+  still analyzed for bugs/smells). Don't contort data to chase the percentage;
+  deciding the gate shouldn't police a data fixture is a judgment call, not a
+  refactor loop.
