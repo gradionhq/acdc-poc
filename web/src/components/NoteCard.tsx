@@ -60,6 +60,25 @@ export interface NoteCardProps {
   onDragLeave: (id: string, e: DragEvent<HTMLElement>) => void;
   onDrop: (id: string, e: DragEvent<HTMLElement>) => void;
   onDeleteAttachment: (noteId: string, filename: string) => void;
+  /**
+   * Optional props applied to the card's root `<li>` when it is rendered inside
+   * a virtualized list (absolute positioning, measurement ref, ARIA position).
+   * Absent for non-virtualized rendering.
+   */
+  rowProps?: NoteCardRowProps;
+}
+
+/**
+ * Props the virtualized {@link NoteList} attaches to a card's root `<li>` so the
+ * windowing layer can position and measure it while keeping the row addressable
+ * by assistive tech.
+ */
+export interface NoteCardRowProps {
+  ref?: (el: Element | null) => void;
+  'data-index'?: number;
+  'aria-setsize'?: number;
+  'aria-posinset'?: number;
+  style?: React.CSSProperties;
 }
 
 /** A small icon-only button with a visible tooltip on hover/focus. */
@@ -127,6 +146,7 @@ export function NoteCard({
   onDragLeave,
   onDrop,
   onDeleteAttachment,
+  rowProps,
 }: NoteCardProps) {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowBtnRef = useRef<HTMLButtonElement>(null);
@@ -169,7 +189,7 @@ export function NoteCard({
 
   if (editingId === n.id) {
     return (
-      <li key={n.id} className={styles.noteCard}>
+      <li key={n.id} className={styles.noteCard} {...rowProps}>
         <div className={styles.fieldGroup}>
           <label className={styles.fieldLabel}>
             Edit title
@@ -243,6 +263,7 @@ export function NoteCard({
         n.color === 'none' ? '' : styles[`card-${n.color}` as keyof typeof styles],
       ].join(' ')}
       data-color={n.color}
+      {...rowProps}
     >
       {/* ── Card header: title + pinned badge ── */}
       <div className={styles.noteHeader}>
