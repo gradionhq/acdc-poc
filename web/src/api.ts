@@ -51,6 +51,10 @@ function toNote(value: Record<string, unknown>): Note {
 export interface NotesPage {
   notes: Note[];
   total: number;
+  /** Total number of pages for the current filter and pageSize (always >= 1). */
+  totalPages: number;
+  /** True when a page after the current one exists. */
+  hasNext: boolean;
 }
 
 export type SortOrder = 'newest' | 'oldest' | 'title';
@@ -92,9 +96,19 @@ export async function listNotes(
   if (!res.ok) throw new Error('failed to load notes');
   const raw = Number(res.headers.get('X-Total-Count'));
   const total = Number.isFinite(raw) && raw >= 0 ? raw : 0;
+  // Prefer the server-supplied page count; fall back to inferring from total
+  // and the requested pageSize for older servers that omit the header.
+  const rawPages = Number(res.headers.get('X-Total-Pages'));
+  const totalPages =
+    Number.isInteger(rawPages) && rawPages >= 1
+      ? rawPages
+      : Math.max(1, Math.ceil(total / pageSize));
+  // X-Has-Next is the canonical signal; derive it from page/totalPages when absent.
+  const hasNextHeader = res.headers.get('X-Has-Next');
+  const hasNext = hasNextHeader === null ? page < totalPages : hasNextHeader === 'true';
   const rawNotes = (await res.json()) as Record<string, unknown>[];
   const notes = rawNotes.map(toNote);
-  return { notes, total };
+  return { notes, total, totalPages, hasNext };
 }
 
 export async function createNote(input: {

@@ -816,4 +816,56 @@ describe('NoteStore — trash / restore / permanentDelete', () => {
     store.trash(n.id);
     expect(store.listTags()).toHaveLength(0);
   });
+
+  describe('list() pagination metadata', () => {
+    function seed(count: number): NoteStore {
+      const store = new NoteStore();
+      for (let i = 0; i < count; i += 1) {
+        store.create({ title: `t${i}`, body: `b${i}` });
+      }
+      return store;
+    }
+
+    it('reports totalPages and hasNext for a non-final page', () => {
+      const store = seed(5);
+      const page1 = store.list(1, 2);
+      expect(page1.total).toBe(5);
+      expect(page1.totalPages).toBe(3);
+      expect(page1.hasNext).toBe(true);
+    });
+
+    it('reports hasNext=false on the last page', () => {
+      const store = seed(5);
+      const last = store.list(3, 2);
+      expect(last.totalPages).toBe(3);
+      expect(last.hasNext).toBe(false);
+      expect(last.items).toHaveLength(1);
+    });
+
+    it('returns totalPages=1 and hasNext=false when there are no matches', () => {
+      const store = seed(0);
+      const result = store.list(1, 10);
+      expect(result.total).toBe(0);
+      expect(result.totalPages).toBe(1);
+      expect(result.hasNext).toBe(false);
+    });
+
+    it('reports a single page when all items fit on one page', () => {
+      const store = seed(3);
+      const result = store.list(1, 10);
+      expect(result.totalPages).toBe(1);
+      expect(result.hasNext).toBe(false);
+    });
+
+    it('reflects the active filter in the metadata', () => {
+      const store = new NoteStore();
+      store.create({ title: 'match one', body: 'b' });
+      store.create({ title: 'match two', body: 'b' });
+      store.create({ title: 'other', body: 'b' });
+      const result = store.list(1, 1, 'match');
+      expect(result.total).toBe(2);
+      expect(result.totalPages).toBe(2);
+      expect(result.hasNext).toBe(true);
+    });
+  });
 });
