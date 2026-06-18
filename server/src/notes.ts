@@ -135,7 +135,11 @@ export function createNotesRouter(store: NoteStore): Router {
     const tagModeParam = req.query.tagMode;
     const tagMode: TagMode = tagModeParam === 'and' || tagModeParam === 'or' ? tagModeParam : 'or';
     const result = store.list(page, pageSize, q, tag, sort, archived, tags, tagMode);
+    // Richer pagination metadata so the client consumes it instead of inferring.
+    // X-Total-Count is retained for backward compatibility.
     res.set('X-Total-Count', String(result.total));
+    res.set('X-Total-Pages', String(result.totalPages));
+    res.set('X-Has-Next', String(result.hasNext));
     res.json(result.items);
   });
 

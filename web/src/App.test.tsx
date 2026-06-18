@@ -1673,6 +1673,74 @@ describe('listNotes — X-Total-Count validation', () => {
   });
 });
 
+describe('listNotes — richer pagination metadata', () => {
+  it('consumes X-Total-Pages and X-Has-Next when present', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'X-Total-Count': '12',
+              'X-Total-Pages': '3',
+              'X-Has-Next': 'true',
+            },
+          }),
+      ),
+    );
+    const result = await listNotes(1, 5);
+    expect(result.totalPages).toBe(3);
+    expect(result.hasNext).toBe(true);
+  });
+
+  it('treats X-Has-Next=false as the canonical end-of-list signal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: {
+              'X-Total-Count': '12',
+              'X-Total-Pages': '3',
+              'X-Has-Next': 'false',
+            },
+          }),
+      ),
+    );
+    const result = await listNotes(3, 5);
+    expect(result.hasNext).toBe(false);
+  });
+
+  it('infers metadata from total and pageSize when the headers are absent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'X-Total-Count': '12' },
+          }),
+      ),
+    );
+    const result = await listNotes(1, 5);
+    // ceil(12 / 5) = 3 pages; page 1 < 3 so there is a next page.
+    expect(result.totalPages).toBe(3);
+    expect(result.hasNext).toBe(true);
+  });
+
+  it('infers a single empty page when total is zero and headers are absent', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify([]), { status: 200 })),
+    );
+    const result = await listNotes(1, 5);
+    expect(result.totalPages).toBe(1);
+    expect(result.hasNext).toBe(false);
+  });
+});
+
 describe('App — dark mode toggle', () => {
   beforeEach(() => {
     mockFetchSequence();

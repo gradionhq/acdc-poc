@@ -33,6 +33,34 @@ describe('notes API', () => {
     expect(res.body).toHaveLength(2);
   });
 
+  it('exposes richer pagination metadata via response headers', async () => {
+    const app = createApp();
+    for (let i = 0; i < 3; i += 1) {
+      await request(app)
+        .post('/api/notes')
+        .send({ title: `t${i}`, body: 'b' })
+        .expect(201);
+    }
+    // First page of three notes at pageSize 2: two pages, more to come.
+    const page1 = await request(app).get('/api/notes?page=1&pageSize=2').expect(200);
+    expect(page1.headers['x-total-count']).toBe('3');
+    expect(page1.headers['x-total-pages']).toBe('2');
+    expect(page1.headers['x-has-next']).toBe('true');
+
+    // Last page: no further pages.
+    const page2 = await request(app).get('/api/notes?page=2&pageSize=2').expect(200);
+    expect(page2.headers['x-total-pages']).toBe('2');
+    expect(page2.headers['x-has-next']).toBe('false');
+  });
+
+  it('reports a single empty page when no notes match', async () => {
+    const app = createApp();
+    const res = await request(app).get('/api/notes').expect(200);
+    expect(res.headers['x-total-count']).toBe('0');
+    expect(res.headers['x-total-pages']).toBe('1');
+    expect(res.headers['x-has-next']).toBe('false');
+  });
+
   it('returns 404 for unknown ids', async () => {
     const app = createApp();
     await request(app).get('/api/notes/nope').expect(404);

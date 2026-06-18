@@ -96,6 +96,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  // Pagination metadata supplied by the server, consumed instead of inferred.
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasNext, setHasNext] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
@@ -164,8 +167,6 @@ export function App() {
   // fire mid-flow and clobber a page set by create/duplicate navigation.
   const committedSearchRef = useRef(searchInput);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
   // The view booleans the data layer reasons about, derived from `view`.
   const showArchived = view === 'archived';
   const showTrash = view === 'trash';
@@ -198,6 +199,8 @@ export function App() {
       if (seq !== reqSeqRef.current) return; // stale — a newer request is in flight
       setNotes(result.notes);
       setTotal(result.total);
+      setTotalPages(result.totalPages);
+      setHasNext(result.hasNext);
       setError(null);
     } catch (e: unknown) {
       if (seq !== reqSeqRef.current) return;
@@ -769,6 +772,7 @@ export function App() {
     <Pagination
       page={page}
       totalPages={totalPages}
+      hasNext={hasNext}
       onPrev={() => setPage((p) => p - 1)}
       onNext={() => setPage((p) => p + 1)}
     />

@@ -40,7 +40,12 @@ export interface AttachmentMeta {
 
 export interface ListResult {
   items: Note[];
+  /** Total number of notes matching the current filter, across all pages. */
   total: number;
+  /** Total number of pages for the current filter and pageSize (always >= 1). */
+  totalPages: number;
+  /** True when a page after the current one exists. */
+  hasNext: boolean;
 }
 
 /** Valid values for the sort query parameter. */
@@ -408,8 +413,12 @@ export class NoteStore {
         }
         return true;
       });
+    const total = all.length;
     const start = (page - 1) * pageSize;
-    return { items: all.slice(start, start + pageSize), total: all.length };
+    // Always at least 1 page so the client never displays "Page 1 of 0".
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const hasNext = page < totalPages;
+    return { items: all.slice(start, start + pageSize), total, totalPages, hasNext };
   }
 
   /**

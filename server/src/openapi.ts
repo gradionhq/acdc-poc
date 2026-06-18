@@ -177,6 +177,14 @@ const spec = {
                 schema: { type: 'integer' },
                 description: 'Total number of notes matching the current filter.',
               },
+              'X-Total-Pages': {
+                schema: { type: 'integer', minimum: 1 },
+                description: 'Total number of pages for the current filter and pageSize.',
+              },
+              'X-Has-Next': {
+                schema: { type: 'boolean' },
+                description: 'Whether a page after the current one exists.',
+              },
             },
             content: JSON_CONTENT({ type: 'array', items: REF_NOTE }),
           },
