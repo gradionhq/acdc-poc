@@ -71,6 +71,7 @@ export function useKeyboardShortcuts(handlers: KeyboardShortcutHandlers): void {
 export const SHORTCUTS = [
   { key: 'n', description: 'Focus new-note title' },
   { key: '/', description: 'Focus search' },
+  { key: '⌘/Ctrl K', description: 'Open command palette' },
   { key: 'Escape', description: 'Close / cancel / clear focus' },
   { key: '?', description: 'Toggle this help panel' },
 ] as const;

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -34,6 +35,7 @@ import {
 } from './api';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Modal } from './components/Modal';
+import { CommandPalette, type Command } from './components/CommandPalette';
 import { ToastContainer } from './ToastContainer';
 import { TagManager } from './TagManager';
 import { useTheme } from './useTheme';
@@ -140,6 +142,11 @@ export function App() {
   const [showHelp, setShowHelp] = useState(false);
   /** Whether the New-note composer modal dialog is open. */
   const [composerOpen, setComposerOpen] = useState(false);
+  /** Whether the Cmd/Ctrl+K command palette is open. */
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  /** Ref to the element focused when the palette opened; focus returns here on close. */
+  const paletteTriggerRef = useRef<HTMLElement | null>(null);
 
   /** Ref to the new-note title input — focused when the composer modal opens. */
   const newNoteTitleRef = useRef<HTMLInputElement>(null);
@@ -718,6 +725,38 @@ export function App() {
 
   useKeyboardShortcuts(shortcutHandlers);
 
+  /** Open the command palette, remembering the trigger to restore focus to. */
+  const openPalette = useCallback(() => {
+    paletteTriggerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPaletteOpen(true);
+  }, []);
+
+  /** Close the command palette and restore focus to whatever opened it. */
+  const closePalette = useCallback(() => {
+    setPaletteOpen(false);
+    paletteTriggerRef.current?.focus();
+    paletteTriggerRef.current = null;
+  }, []);
+
+  // Global Cmd/Ctrl+K toggles the command palette. Kept separate from
+  // useKeyboardShortcuts (which deliberately ignores modifier combos) so the
+  // wiring stays a single self-contained listener.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        if (paletteOpen) {
+          closePalette();
+        } else {
+          openPalette();
+        }
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [paletteOpen, openPalette, closePalette]);
+
   // Move focus into the help dialog when it opens; restore to the toggle button on close.
   const prevShowHelpRef = useRef(false);
   useEffect(() => {
@@ -753,6 +792,70 @@ export function App() {
     void refreshTags();
     void refreshTagSuggestions();
   }
+
+  /**
+   * Navigate to and reveal a note: clear filters, switch to the All view, and
+   * page to wherever the note lives so a palette selection always lands on it.
+   */
+  const revealNote = useCallback(
+    async (id: string) => {
+      setView('all');
+      setSearchInput('');
+      setQuery('');
+      setTagFilter('');
+      try {
+        const dest = await pageContainingNote(id, sort);
+        setPage(dest);
+      } catch (e: unknown) {
+        notifyError(e, 'Failed to open note');
+      }
+    },
+    // pageContainingNote closes over the current render's `sort`; re-create when
+    // it (or the error notifier) changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sort, notifyError],
+  );
+
+  /**
+   * Commands surfaced in the palette, in priority order: global actions, the
+   * view switches, then one entry per visible note title (jump-to-note).
+   */
+  const paletteCommands: Command[] = useMemo(() => {
+    const actions: Command[] = [
+      {
+        id: 'action-new-note',
+        title: 'New note',
+        group: 'Action',
+        run: () => setComposerOpen(true),
+      },
+      {
+        id: 'action-toggle-theme',
+        title: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+        group: 'Action',
+        run: toggleTheme,
+      },
+    ];
+    const views: Command[] = [
+      { id: 'view-all', title: 'Go to: All notes', group: 'View', run: () => onSelectView('all') },
+      {
+        id: 'view-archived',
+        title: 'Go to: Archived',
+        group: 'View',
+        run: () => onSelectView('archived'),
+      },
+      { id: 'view-trash', title: 'Go to: Trash', group: 'View', run: () => onSelectView('trash') },
+      { id: 'view-tags', title: 'Go to: Tags', group: 'View', run: () => onSelectView('tags') },
+    ];
+    const noteCommands: Command[] = displayedNotes.map((n) => ({
+      id: `note-${n.id}`,
+      title: n.title,
+      group: 'Note',
+      run: () => void revealNote(n.id),
+    }));
+    return [...actions, ...views, ...noteCommands];
+    // onSelectView is a stable function declaration; deps cover the dynamic bits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme, toggleTheme, displayedNotes, revealNote]);
 
   const errorBanner = error && (
     <div role="alert" className={styles.errorBanner}>
@@ -882,6 +985,8 @@ export function App() {
           />
         </Modal>
       )}
+
+      {paletteOpen && <CommandPalette commands={paletteCommands} onClose={closePalette} />}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       {pendingDeleteId !== null && (
