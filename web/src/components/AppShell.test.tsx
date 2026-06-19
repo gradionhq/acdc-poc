@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AppShell, MAIN_CONTENT_ID } from './AppShell';
 
 describe('AppShell', () => {
@@ -58,5 +59,87 @@ describe('AppShell', () => {
 
     const main = screen.getByRole('main');
     expect(main).toHaveAttribute('tabindex', '-1');
+  });
+});
+
+describe('AppShell — responsive drawer', () => {
+  function renderShell() {
+    return render(
+      <AppShell
+        header={<div data-testid="hdr">header</div>}
+        sidebar={
+          <nav aria-label="Views">
+            <button type="button">All notes</button>
+          </nav>
+        }
+      >
+        <p>view body</p>
+      </AppShell>,
+    );
+  }
+
+  it('renders a hamburger toggle that is collapsed by default', () => {
+    renderShell();
+    const toggle = screen.getByRole('button', { name: /open navigation menu/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('aria-controls');
+  });
+
+  it('renders the navigation exactly once (no duplicate landmark for the drawer)', () => {
+    renderShell();
+    expect(screen.getAllByRole('navigation', { name: /views/i })).toHaveLength(1);
+  });
+
+  it('opens the drawer, sets aria-expanded, and moves focus into it', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const toggle = screen.getByRole('button', { name: /open navigation menu/i });
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    // Focus moves to the first focusable element of the drawer — its close button.
+    expect(screen.getByRole('button', { name: /close navigation menu/i })).toHaveFocus();
+  });
+
+  it('closes the drawer via its close button and restores focus to the toggle', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const toggle = screen.getByRole('button', { name: /open navigation menu/i });
+    await user.click(toggle);
+
+    await user.click(screen.getByRole('button', { name: /close navigation menu/i }));
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveFocus();
+  });
+
+  it('closes the drawer when Escape is pressed', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const toggle = screen.getByRole('button', { name: /open navigation menu/i });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    await user.keyboard('{Escape}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveFocus();
+  });
+
+  it('closes the drawer when the scrim is clicked', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    const toggle = screen.getByRole('button', { name: /open navigation menu/i });
+    await user.click(toggle);
+
+    await user.click(screen.getByRole('button', { name: /dismiss navigation menu/i }));
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps the sidebar navigation reachable while the drawer is open', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole('button', { name: /open navigation menu/i }));
+
+    const nav = screen.getByRole('navigation', { name: /views/i });
+    expect(within(nav).getByRole('button', { name: /all notes/i })).toBeInTheDocument();
   });
 });

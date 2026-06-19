@@ -1,6 +1,7 @@
 /*
  * AppShell layout styles — CSS Module.
  * Sticky top header + left sidebar + main content area.
+ * On phone widths the sidebar collapses into a hamburger-toggled drawer.
  * All values reference design-system tokens; no magic numbers.
  */
 
@@ -22,7 +23,7 @@
   position: fixed;
   top: var(--space-2);
   left: var(--space-2);
-  z-index: 1100; /* above the sticky header and toasts */
+  z-index: 1100; /* above the sticky header, drawer, and toasts */
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-md);
   background-color: var(--color-surface);
@@ -43,15 +44,22 @@
   opacity: 1;
 }
 
-/* The main landmark is programmatically focusable (tabIndex=-1) so the skip
- * link can move focus to it without leaving a persistent focus ring on a
- * non-interactive region. */
-.main:focus {
-  outline: none;
+/* ── Header row (hamburger + header bar) ─────────────────────── */
+
+.headerRow {
+  display: contents; /* header bar stays the sticky element on wide viewports */
 }
 
-.main:focus-visible {
-  outline: none;
+.headerSlot {
+  display: contents;
+}
+
+/*
+ * Hamburger toggle — only shown on phone widths. Hidden (and removed from the
+ * tab order) on wider viewports where the sidebar is always visible.
+ */
+.menuButton {
+  display: none;
 }
 
 /* ── Body row: sidebar + main ────────────────────────────────── */
@@ -65,6 +73,26 @@
   margin: 0 auto;
 }
 
+/* ── Drawer wrapper (holds the single sidebar instance) ──────── */
+/*
+ * On wide viewports this is a transparent inline wrapper that simply contributes
+ * the sidebar to the grid's first column. On phone widths it becomes a fixed
+ * off-canvas panel (see the ≤ 480 px block).
+ */
+.drawer {
+  display: contents;
+}
+
+/* The in-drawer close button only exists for the phone drawer layout. */
+.drawerClose {
+  display: none;
+}
+
+/* The scrim is only rendered while the phone drawer is open. */
+.scrim {
+  display: none;
+}
+
 /* ── Main content area ───────────────────────────────────────── */
 
 .main {
@@ -72,9 +100,17 @@
   padding: var(--space-6) var(--space-6) var(--space-8);
 }
 
+/* The main landmark is programmatically focusable (tabIndex=-1) so the skip
+ * link can move focus to it without leaving a persistent focus ring on a
+ * non-interactive region. */
+.main:focus,
+.main:focus-visible {
+  outline: none;
+}
+
 /* ── Responsive overrides — ≤ 768 px (sidebar collapses on top) ─ */
 
-@media (max-width: 768px) {
+@media (max-width: 768px) and (min-width: 481px) {
   .body {
     grid-template-columns: 1fr;
   }
@@ -83,5 +119,131 @@
     padding: var(--space-4) var(--space-4) var(--space-6);
     /* Prevent any child from overflowing the content column */
     overflow-x: hidden;
+  }
+}
+
+/* ── Responsive overrides — ≤ 480 px (hamburger drawer) ──────── */
+
+@media (max-width: 480px) {
+  .body {
+    grid-template-columns: 1fr;
+  }
+
+  .main {
+    padding: var(--space-4) var(--space-4) var(--space-6);
+    overflow-x: hidden;
+  }
+
+  /* Surface the hamburger toggle inside the header row. */
+  .headerRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    position: sticky;
+    top: 0;
+    z-index: 20; /* above the sticky header's own z-index */
+    background-color: var(--color-surface);
+    border-bottom: 1px solid var(--color-surface-border);
+    padding-left: var(--space-3);
+  }
+
+  .headerSlot {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* The header bar must not double up its own sticky border in the row. */
+  .headerSlot > :global(header) {
+    border-bottom: none;
+  }
+
+  .menuButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0;
+    color: var(--color-text);
+    background: transparent;
+    border: 1px solid var(--color-surface-border);
+    border-radius: var(--radius-base);
+    cursor: pointer;
+    transition: var(--transition-colors);
+  }
+
+  .menuButton:hover {
+    border-color: var(--color-primary);
+    background-color: var(--color-tag-bg);
+  }
+
+  .menuButton:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  /* Off-canvas drawer panel. */
+  .drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000; /* above content and the sticky header, below the skip link */
+    width: min(18rem, 80vw);
+    background-color: var(--color-surface);
+    border-right: 1px solid var(--color-surface-border);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    overflow-y: auto;
+  }
+
+  .drawerOpen {
+    transform: translateX(0);
+  }
+
+  .drawerClose {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-end;
+    min-height: 44px;
+    min-width: 44px;
+    margin: var(--space-2) var(--space-2) 0 0;
+    padding: 0;
+    color: var(--color-text-muted);
+    background: transparent;
+    border: 1px solid var(--color-surface-border);
+    border-radius: var(--radius-base);
+    cursor: pointer;
+    transition: var(--transition-colors);
+  }
+
+  .drawerClose:hover {
+    color: var(--color-text);
+    border-color: var(--color-primary);
+    background-color: var(--color-tag-bg);
+  }
+
+  .drawerClose:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  /* Dimmed, dismissable backdrop behind the open drawer. */
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999; /* just below the drawer */
+    border: none;
+    padding: 0;
+    margin: 0;
+    background-color: rgb(0 0 0 / 0.5);
+    cursor: pointer;
   }
 }

@@ -65,9 +65,15 @@
   flex-shrink: 0;
 }
 
-/* ── Responsive overrides — ≤ 768 px (horizontal nav on top) ──── */
+/* ── Responsive overrides — 481–768 px (horizontal nav on top) ── */
+/*
+ * Tablet widths show the sidebar as a horizontal nav strip above the content.
+ * Phone widths (≤ 480 px) instead surface it inside the off-canvas drawer, where
+ * the default vertical layout is the right fit — so this block is upper- and
+ * lower-bounded to exclude phones.
+ */
 
-@media (max-width: 768px) {
+@media (max-width: 768px) and (min-width: 481px) {
   .sidebar {
     padding: var(--space-3) var(--space-4);
     border-right: none;
