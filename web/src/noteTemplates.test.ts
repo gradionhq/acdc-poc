@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  NOTE_TEMPLATES,
-  getTemplateById,
-  templateSeed,
-  type NoteTemplate,
-} from './noteTemplates';
+import { NOTE_TEMPLATES, getTemplateById, templateSeed, type NoteTemplate } from './noteTemplates';
 import { NOTE_COLORS } from './api';
 
 describe('noteTemplates', () => {
