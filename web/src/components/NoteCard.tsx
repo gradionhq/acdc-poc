@@ -11,6 +11,9 @@ import {
   Copy,
   Trash2,
   RotateCcw,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { Button } from './Button';
 import { NoteBody } from '../NoteBody';
@@ -75,6 +78,36 @@ export interface NoteCardProps {
    * Absent for non-virtualized rendering.
    */
   rowProps?: NoteCardRowProps;
+  /**
+   * Reorder affordances for pinned notes. Present only when this card is part of
+   * the pinned group and reordering applies (active note, not in selection mode,
+   * not being edited). When absent the card shows no reorder controls.
+   */
+  reorder?: NoteCardReorderProps;
+}
+
+/**
+ * Props that drive the pinned-note reorder controls (drag handle + keyboard
+ * move buttons) on a single card. `position`/`total` describe the note's place
+ * within the pinned group so edge buttons can be disabled and announced.
+ */
+export interface NoteCardReorderProps {
+  /** 0-based position of this note within the pinned group. */
+  position: number;
+  /** Total number of notes in the pinned group. */
+  total: number;
+  /** Nudge this note one step toward the top or bottom of the pinned group. */
+  onMove: (id: string, direction: 'up' | 'down') => void;
+  /** Begin dragging this note (drag handle pressed). */
+  onDragStart: (id: string) => void;
+  /** Pointer dragged over this note while another pinned note is being dragged. */
+  onDragOverNote: (id: string, e: DragEvent<HTMLElement>) => void;
+  /** A dragged pinned note was dropped onto this note. */
+  onDropNote: (id: string, e: DragEvent<HTMLElement>) => void;
+  /** Drag ended (cleanup, regardless of where it ended). */
+  onDragEnd: () => void;
+  /** True while this note is the one currently being dragged. */
+  isDragging: boolean;
 }
 
 /**
@@ -159,6 +192,7 @@ export function NoteCard({
   selected = false,
   onToggleSelect,
   rowProps,
+  reorder,
 }: NoteCardProps) {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const overflowBtnRef = useRef<HTMLButtonElement>(null);
@@ -274,11 +308,56 @@ export function NoteCard({
         styles.noteCard,
         n.color === 'none' ? '' : styles[`card-${n.color}` as keyof typeof styles],
         selectable && selected ? styles.noteCardSelected : '',
+        reorder?.isDragging ? styles.noteCardDragging : '',
       ].join(' ')}
       data-color={n.color}
       {...(selectable ? { 'aria-selected': selected } : {})}
+      {...(reorder
+        ? {
+            onDragOver: (e: DragEvent<HTMLElement>) => reorder.onDragOverNote(n.id, e),
+            onDrop: (e: DragEvent<HTMLElement>) => reorder.onDropNote(n.id, e),
+          }
+        : {})}
       {...rowProps}
     >
+      {/* ── Reorder controls (pinned group only): drag handle + keyboard moves ── */}
+      {reorder && (
+        <div className={styles.reorderControls} aria-label={`Reorder ${n.title}`}>
+          <span
+            className={styles.dragHandle}
+            role="button"
+            tabIndex={-1}
+            draggable
+            aria-label={`Drag to reorder ${n.title}`}
+            title="Drag to reorder"
+            onDragStart={() => reorder.onDragStart(n.id)}
+            onDragEnd={() => reorder.onDragEnd()}
+          >
+            <GripVertical size={16} aria-hidden="true" />
+          </span>
+          <button
+            type="button"
+            className={styles.reorderBtn}
+            aria-label={`Move ${n.title} up`}
+            title="Move up"
+            disabled={reorder.position === 0}
+            onClick={() => reorder.onMove(n.id, 'up')}
+          >
+            <ChevronUp size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={styles.reorderBtn}
+            aria-label={`Move ${n.title} down`}
+            title="Move down"
+            disabled={reorder.position === reorder.total - 1}
+            onClick={() => reorder.onMove(n.id, 'down')}
+          >
+            <ChevronDown size={14} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
       {/* ── Card header: selection checkbox + title + pinned badge ── */}
       <div className={styles.noteHeader}>
         {selectable && (

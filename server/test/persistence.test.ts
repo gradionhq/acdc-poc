@@ -97,6 +97,18 @@ describe('NoteStore — SQLite persistence', () => {
     expect(second.listTrashed().map((n) => n.id)).toEqual([note.id]);
   });
 
+  it('persists pinned ordering across restarts', () => {
+    const first = new NoteStore({ path: dbPath });
+    const a = first.create({ title: 'a', body: 'b' });
+    const b = first.create({ title: 'b', body: 'b' });
+    first.togglePin(a.id);
+    first.togglePin(b.id);
+    first.reorderPinned([b.id, a.id]);
+
+    const second = new NoteStore({ path: dbPath });
+    expect(second.list(1, 10).items.map((n) => n.id)).toEqual([b.id, a.id]);
+  });
+
   it('isolates separate in-memory stores from one another', () => {
     const a = new NoteStore();
     const b = new NoteStore();
@@ -144,7 +156,10 @@ describe('migrations', () => {
       }[]
     ).map((r) => r.name);
     expect(tables).toEqual(expect.arrayContaining(['notes', 'attachments', 'tag_colors', 'meta']));
-    expect(db.pragma('user_version', { simple: true })).toBe(1);
+    expect(db.pragma('user_version', { simple: true })).toBe(2);
+    // v2 migration added the pinnedOrder column to the notes table.
+    const noteColumns = (db.pragma('table_info(notes)') as { name: string }[]).map((c) => c.name);
+    expect(noteColumns).toContain('pinnedOrder');
     db.close();
   });
 
@@ -160,7 +175,7 @@ describe('migrations', () => {
 
     // Re-open: migration must not wipe or recreate the existing table/data.
     const db2 = openDatabase(dbPath);
-    expect(db2.pragma('user_version', { simple: true })).toBe(1);
+    expect(db2.pragma('user_version', { simple: true })).toBe(2);
     const row = db2.prepare(`SELECT title FROM notes WHERE id = '1'`).get() as { title: string };
     expect(row.title).toBe('t');
     db2.close();
@@ -178,7 +193,7 @@ describe('migrations', () => {
     created.close();
     // A plain driver open must see the migrated schema (no migration side effects).
     const raw = new Database(dbPath);
-    expect(raw.pragma('user_version', { simple: true })).toBe(1);
+    expect(raw.pragma('user_version', { simple: true })).toBe(2);
     raw.close();
   });
 });

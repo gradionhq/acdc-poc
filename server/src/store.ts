@@ -22,6 +22,12 @@ export interface Note {
   archived: boolean;
   color: NoteColor;
   deletedAt: number | null;
+  /**
+   * Explicit position within the pinned group. A smaller value sorts earlier.
+   * Always null for unpinned notes; a non-negative integer for pinned notes.
+   * Drives drag-to-reorder / keyboard reorder of pinned notes.
+   */
+  pinnedOrder: number | null;
 }
 
 export interface Attachment {
@@ -78,6 +84,7 @@ interface NoteRow {
   archived: number;
   color: string;
   deletedAt: number | null;
+  pinnedOrder: number | null;
 }
 
 /**
@@ -116,13 +123,14 @@ export class NoteStore {
     this.db = openDatabase(resolveDbPath(options.path));
 
     this.stmtInsertNote = this.db.prepare(
-      `INSERT INTO notes (id, title, body, tags, createdAt, pinned, archived, color, deletedAt)
-       VALUES (@id, @title, @body, @tags, @createdAt, @pinned, @archived, @color, @deletedAt)`,
+      `INSERT INTO notes (id, title, body, tags, createdAt, pinned, archived, color, deletedAt, pinnedOrder)
+       VALUES (@id, @title, @body, @tags, @createdAt, @pinned, @archived, @color, @deletedAt, @pinnedOrder)`,
     );
     this.stmtGetNote = this.db.prepare(`SELECT * FROM notes WHERE id = ?`);
     this.stmtUpdateNote = this.db.prepare(
       `UPDATE notes SET title = @title, body = @body, tags = @tags, pinned = @pinned,
-         archived = @archived, color = @color, deletedAt = @deletedAt WHERE id = @id`,
+         archived = @archived, color = @color, deletedAt = @deletedAt, pinnedOrder = @pinnedOrder
+       WHERE id = @id`,
     );
     this.stmtDeleteNote = this.db.prepare(`DELETE FROM notes WHERE id = ?`);
     this.stmtAllNotes = this.db.prepare(`SELECT * FROM notes`);
@@ -164,6 +172,7 @@ export class NoteStore {
       archived: row.archived === 1,
       color: row.color as NoteColor,
       deletedAt: row.deletedAt,
+      pinnedOrder: row.pinnedOrder,
     };
   }
 
@@ -198,6 +207,7 @@ export class NoteStore {
       archived: note.archived ? 1 : 0,
       color: note.color,
       deletedAt: note.deletedAt,
+      pinnedOrder: note.pinnedOrder,
     });
   }
 
@@ -215,6 +225,7 @@ export class NoteStore {
       archived: false,
       color: input.color ?? 'none',
       deletedAt: null,
+      pinnedOrder: null,
     };
     this.stmtInsertNote.run({
       id: note.id,
@@ -226,6 +237,7 @@ export class NoteStore {
       archived: 0,
       color: note.color,
       deletedAt: null,
+      pinnedOrder: null,
     });
     return note;
   }
@@ -272,9 +284,63 @@ export class NoteStore {
   togglePin(id: string): Note | undefined {
     const existing = this.get(id);
     if (!existing) return undefined;
-    const updated: Note = { ...existing, pinned: !existing.pinned };
+    const willPin = !existing.pinned;
+    const updated: Note = {
+      ...existing,
+      pinned: willPin,
+      // Pinning appends the note to the end of the pinned group (largest order);
+      // unpinning clears the order so it rejoins the normal secondary sort.
+      pinnedOrder: willPin ? this.nextPinnedOrder() : null,
+    };
     this.putNote(updated);
     return updated;
+  }
+
+  /**
+   * Compute the order value for a newly pinned note: one greater than the
+   * largest `pinnedOrder` currently in use, so the note appends to the end of
+   * the pinned group. Returns 0 when no pinned note carries an order yet.
+   */
+  private nextPinnedOrder(): number {
+    let max = -1;
+    for (const note of this.allNotes()) {
+      if (note.pinnedOrder !== null && note.pinnedOrder > max) {
+        max = note.pinnedOrder;
+      }
+    }
+    return max + 1;
+  }
+
+  /**
+   * Persist an explicit ordering for the pinned notes identified by `ids`.
+   *
+   * Every id must reference an existing, currently-pinned, non-trashed note;
+   * otherwise the call is rejected wholesale (returns false) and nothing is
+   * changed. On success each listed note's `pinnedOrder` is set to its index in
+   * `ids` (0-based), so the supplied sequence becomes the new top-to-bottom
+   * order of the pinned group. Returns true.
+   *
+   * The caller is responsible for supplying the complete set of pinned ids;
+   * pinned notes omitted from `ids` keep their previous order values and may
+   * therefore interleave unpredictably — the route layer validates completeness.
+   */
+  reorderPinned(ids: string[]): boolean {
+    const notes = ids.map((id) => this.get(id));
+    // Reject unless every id resolves to an existing, pinned, active note.
+    if (notes.some((n) => n === undefined || !n.pinned || n.deletedAt !== null)) {
+      return false;
+    }
+    notes.forEach((note, index) => {
+      this.putNote({ ...(note as Note), pinnedOrder: index });
+    });
+    return true;
+  }
+
+  /** Return the ids of all active (non-trashed) pinned notes. */
+  pinnedIds(): string[] {
+    return this.allNotes()
+      .filter((n) => n.pinned && n.deletedAt === null)
+      .map((n) => n.id);
   }
 
   toggleArchive(id: string): Note | undefined {
@@ -594,6 +660,17 @@ export class NoteStore {
       .sort((a, b) => {
         // Pinned notes always sort before unpinned regardless of secondary sort.
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        // Within the pinned group, honour the explicit drag/keyboard order.
+        // A note with an assigned order sorts ahead of one without; ties (both
+        // null, e.g. pinned before the ordering feature shipped) fall through to
+        // the secondary sort below for a stable, predictable result.
+        if (a.pinned && b.pinned) {
+          const ao = a.pinnedOrder;
+          const bo = b.pinnedOrder;
+          if (ao !== null && bo !== null && ao !== bo) return ao - bo;
+          if (ao !== null && bo === null) return -1;
+          if (ao === null && bo !== null) return 1;
+        }
         // Within each pin group apply the requested secondary sort.
         if (sort === 'oldest') return a.createdAt - b.createdAt;
         if (sort === 'title') return a.title.localeCompare(b.title);

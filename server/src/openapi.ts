@@ -91,6 +91,12 @@ const spec = {
               'Wall-clock timestamp (ms) at which the note was trashed, or null when active.',
             example: null,
           },
+          pinnedOrder: {
+            type: ['number', 'null'],
+            description:
+              'Explicit position within the pinned group (smaller sorts earlier); null for unpinned notes.',
+            example: null,
+          },
         },
       },
       AttachmentMeta: {
@@ -319,6 +325,48 @@ const spec = {
             content: JSON_CONTENT(REF_NOTE),
           },
           '400': REF_BAD_REQUEST,
+        },
+      },
+    },
+    '/notes/pin-order': {
+      patch: {
+        summary: 'Reorder pinned notes',
+        operationId: 'reorderPinnedNotes',
+        tags: ['notes'],
+        description:
+          'Persist a new top-to-bottom order for the pinned notes. The body must list exactly the current set of pinned note ids, in the desired order.',
+        requestBody: {
+          required: true,
+          content: JSON_CONTENT({
+            type: 'object',
+            required: ['ids'],
+            properties: {
+              ids: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Pinned note ids in the desired top-to-bottom order.',
+                example: ['3', '1', '2'],
+              },
+            },
+          }),
+        },
+        responses: {
+          '200': {
+            description: 'Order applied; echoes the ids in their new order.',
+            content: JSON_CONTENT({
+              type: 'object',
+              required: ['ids'],
+              properties: { ids: { type: 'array', items: { type: 'string' } } },
+            }),
+          },
+          '400': REF_BAD_REQUEST,
+          '409': {
+            description: 'The supplied ids do not match the current set of pinned notes.',
+            content: JSON_CONTENT({
+              type: 'object',
+              properties: { error: { type: 'string' } },
+            }),
+          },
         },
       },
     },
