@@ -31,6 +31,7 @@ describe('validateOpenApiSpec', () => {
       ['/notes/{id}/attachments/{name}', 'delete'],
       ['/tags', 'get'],
       ['/tags/rename', 'post'],
+      ['/tags/merge', 'post'],
       ['/tags/{name}', 'put'],
       ['/tags/{name}', 'delete'],
     ];

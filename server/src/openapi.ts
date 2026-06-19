@@ -172,6 +172,14 @@ const spec = {
           to: { type: 'string', example: 'office' },
         },
       },
+      MergeTagRequest: {
+        type: 'object',
+        required: ['from', 'to'],
+        properties: {
+          from: { type: 'string', example: 'todo' },
+          to: { type: 'string', example: 'tasks' },
+        },
+      },
       SetTagColorRequest: {
         type: 'object',
         required: ['color'],
@@ -563,6 +571,24 @@ const spec = {
             description: 'The target tag name already exists as a distinct tag.',
             content: JSON_CONTENT(REF_ERROR),
           },
+        },
+      },
+    },
+    '/tags/merge': {
+      post: {
+        summary: 'Merge one tag into another',
+        operationId: 'mergeTag',
+        tags: ['tags'],
+        requestBody: {
+          required: true,
+          content: JSON_CONTENT({ $ref: '#/components/schemas/MergeTagRequest' }),
+        },
+        responses: {
+          '200': {
+            description: 'Number of notes affected by the merge.',
+            content: JSON_CONTENT({ $ref: '#/components/schemas/AffectedResponse' }),
+          },
+          '400': REF_BAD_REQUEST,
         },
       },
     },

@@ -65,6 +65,47 @@
   flex-shrink: 0;
 }
 
+/* Label takes the remaining space so the count badge is pushed to the end. */
+.navLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Per-view count badge. Neutral pill at rest; on the active item it picks up
+ * the accent so the highlighted row reads as a single coherent unit.
+ */
+.badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--line-height-tight);
+  color: var(--color-text-muted);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-full);
+}
+
+.navItem:hover .badge {
+  color: var(--color-text);
+}
+
+.navItemActive .badge,
+.navItemActive:hover .badge {
+  color: var(--color-primary);
+  background-color: var(--color-surface);
+  border-color: var(--color-tag-border);
+}
+
 /* ── Responsive overrides — 481–768 px (horizontal nav on top) ── */
 /*
  * Tablet widths show the sidebar as a horizontal nav strip above the content.

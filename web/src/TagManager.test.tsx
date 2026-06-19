@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TagManager } from './TagManager';
 import { App } from './App';
@@ -37,6 +37,34 @@ function mockTagFetch(
           }
           return t;
         });
+        return new Response(JSON.stringify({ affected }), { status: 200 });
+      }
+
+      // POST /api/tags/merge
+      if (init?.method === 'POST' && urlStr.includes('/api/tags/merge')) {
+        const { from, to } = JSON.parse(String(init.body)) as { from: string; to: string };
+        if (!from || !to || from === to) {
+          return new Response(JSON.stringify({ error: 'invalid merge' }), { status: 400 });
+        }
+        let affected = 0;
+        const target = tags.find((t) => t.tag === to);
+        tags = tags.flatMap((t) => {
+          if (t.tag === from) {
+            affected++;
+            return [];
+          }
+          return [t];
+        });
+        if (affected > 0 && target) {
+          tags = tags.map((t) =>
+            t.tag === to
+              ? {
+                  ...t,
+                  count: t.count + (initial.find((i) => i.tag === from)?.count ?? affected),
+                }
+              : t,
+          );
+        }
         return new Response(JSON.stringify({ affected }), { status: 200 });
       }
 
@@ -152,11 +180,7 @@ describe('TagManager', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/already exists/i);
   });
 
-  it('deletes a tag after confirmation', async () => {
-    vi.stubGlobal(
-      'confirm',
-      vi.fn(() => true),
-    );
+  it('deletes a tag after confirming in the dialog', async () => {
     const onChanged = vi.fn();
     mockTagFetch([{ tag: 'remove-me', count: 2 }]);
     render(<TagManager onChanged={onChanged} />);
@@ -164,21 +188,25 @@ describe('TagManager', () => {
     await waitFor(() => expect(screen.getByText('remove-me')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /delete tag remove-me/i }));
 
+    // Confirm dialog appears; click its destructive Delete button.
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+
     await waitFor(() => expect(screen.queryByText('remove-me')).not.toBeInTheDocument());
     expect(onChanged).toHaveBeenCalled();
   });
 
-  it('does not delete when confirmation is cancelled', async () => {
-    vi.stubGlobal(
-      'confirm',
-      vi.fn(() => false),
-    );
+  it('does not delete when the dialog is cancelled', async () => {
     mockTagFetch([{ tag: 'stay', count: 1 }]);
     render(<TagManager onChanged={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByText('stay')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /delete tag stay/i }));
 
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByText('stay')).toBeInTheDocument();
   });
 
@@ -297,6 +325,123 @@ describe('TagManager', () => {
     await waitFor(() => expect(screen.getByText('work')).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /set work color blue/i }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/bad color/i));
+  });
+
+  it('shows a Merge button for each tag when at least two tags exist', async () => {
+    mockTagFetch([
+      { tag: 'alpha', count: 1 },
+      { tag: 'beta', count: 1 },
+    ]);
+    render(<TagManager onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText('alpha')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /merge tag alpha/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /merge tag beta/i })).toBeEnabled();
+  });
+
+  it('disables the Merge button when only one tag exists', async () => {
+    mockTagFetch([{ tag: 'lonely', count: 1 }]);
+    render(<TagManager onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText('lonely')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /merge tag lonely/i })).toBeDisabled();
+  });
+
+  it('merges one tag into another after confirming', async () => {
+    const onChanged = vi.fn();
+    mockTagFetch([
+      { tag: 'todo', count: 2 },
+      { tag: 'tasks', count: 1 },
+    ]);
+    render(<TagManager onChanged={onChanged} />);
+
+    await waitFor(() => expect(screen.getByText('todo')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /merge tag todo/i }));
+
+    const select = screen.getByRole('combobox', { name: /merge todo into/i });
+    await userEvent.selectOptions(select, 'tasks');
+    await userEvent.click(screen.getByRole('button', { name: /^merge$/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent(/merge "todo" into "tasks"/i);
+    await userEvent.click(within(dialog).getByRole('button', { name: /^merge$/i }));
+
+    await waitFor(() => expect(screen.queryByText('todo')).not.toBeInTheDocument());
+    expect(screen.getByText('tasks')).toBeInTheDocument();
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('does not merge when the dialog is cancelled', async () => {
+    mockTagFetch([
+      { tag: 'todo', count: 2 },
+      { tag: 'tasks', count: 1 },
+    ]);
+    render(<TagManager onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText('todo')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /merge tag todo/i }));
+
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: /merge todo into/i }),
+      'tasks',
+    );
+    await userEvent.click(screen.getByRole('button', { name: /^merge$/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByText('todo')).toBeInTheDocument();
+  });
+
+  it('cancelling the merge row hides the tag selector', async () => {
+    mockTagFetch([
+      { tag: 'todo', count: 1 },
+      { tag: 'tasks', count: 1 },
+    ]);
+    render(<TagManager onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText('todo')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /merge tag todo/i }));
+    expect(screen.getByRole('combobox', { name: /merge todo into/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByRole('combobox', { name: /merge todo into/i })).not.toBeInTheDocument();
+  });
+
+  it('shows an error when merging fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const urlStr = url as string;
+        if (init?.method === 'POST' && urlStr.includes('/api/tags/merge')) {
+          return new Response(JSON.stringify({ error: 'merge boom' }), { status: 400 });
+        }
+        if (urlStr.includes('/api/tags')) {
+          return new Response(
+            JSON.stringify([
+              { tag: 'todo', count: 1, color: null },
+              { tag: 'tasks', count: 1, color: null },
+            ]),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+      }),
+    );
+    render(<TagManager onChanged={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText('todo')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /merge tag todo/i }));
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: /merge todo into/i }),
+      'tasks',
+    );
+    await userEvent.click(screen.getByRole('button', { name: /^merge$/i }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: /^merge$/i }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/merge boom/i));
   });
 });
 

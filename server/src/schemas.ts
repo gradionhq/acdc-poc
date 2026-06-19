@@ -75,6 +75,12 @@ export const renameTagSchema = z.object({
   to: tagName('to'),
 });
 
+/** POST /api/tags/merge body. */
+export const mergeTagSchema = z.object({
+  from: tagName('from'),
+  to: tagName('to'),
+});
+
 /** PUT /api/tags/:name body. */
 export const setTagColorSchema = z.object({
   color: tagColor,

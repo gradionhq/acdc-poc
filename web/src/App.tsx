@@ -45,7 +45,7 @@ import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 import { AppShell } from './components/AppShell';
 import { FilterBar } from './components/FilterBar';
 import { HeaderBar } from './components/HeaderBar';
-import { Sidebar, type AppView } from './components/Sidebar';
+import { Sidebar, type AppView, type SidebarCounts } from './components/Sidebar';
 import { NoteComposer } from './components/NoteComposer';
 import type { TemplateSeed } from './noteTemplates';
 import { NoteList } from './components/NoteList';
@@ -208,6 +208,19 @@ export function App() {
   const showArchived = view === 'archived';
   const showTrash = view === 'trash';
   const showTagManager = view === 'tags';
+
+  // Counts shown as badges in the sidebar. We only surface numbers we can state
+  // accurately without extra fetches: the tag count (always loaded) and the
+  // total for the active list view when it is unfiltered (so the number is the
+  // true view total rather than a filtered subset). A filtered list omits its
+  // badge instead of showing a misleading count.
+  const unfilteredList = query === '' && tagFilter === '';
+  const sidebarCounts: SidebarCounts = { tags: tags.length };
+  if (showTrash) {
+    sidebarCounts.trash = trashedNotes.length;
+  } else if (!showTagManager && unfilteredList) {
+    sidebarCounts[view] = total;
+  }
 
   /** Parse a comma-separated tag filter string into a trimmed, non-empty, deduplicated tag list. */
   function parseTagFilter(raw: string): string[] {
@@ -1012,7 +1025,7 @@ export function App() {
           helpCloseBtnRef={helpCloseBtnRef}
         />
       }
-      sidebar={<Sidebar view={view} onSelectView={onSelectView} />}
+      sidebar={<Sidebar view={view} onSelectView={onSelectView} counts={sidebarCounts} />}
     >
       {errorBanner}
 
