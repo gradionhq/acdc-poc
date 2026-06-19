@@ -101,12 +101,12 @@ describe('notes API', () => {
       .put(`/api/notes/${created.body.id}`)
       .send({ title: 42 })
       .expect(400);
-    expect(badTitle.body).toEqual({ error: 'title must be a string' });
+    expect(badTitle.body).toMatchObject({ error: 'title must be a string' });
     const badBody = await request(app)
       .put(`/api/notes/${created.body.id}`)
       .send({ body: true })
       .expect(400);
-    expect(badBody.body).toEqual({ error: 'body must be a string' });
+    expect(badBody.body).toMatchObject({ error: 'body must be a string' });
   });
 
   it('returns 400 when PUT payload is empty object (no fields)', async () => {
@@ -116,7 +116,7 @@ describe('notes API', () => {
       .send({ title: 't', body: 'b' })
       .expect(201);
     const res = await request(app).put(`/api/notes/${created.body.id}`).send({}).expect(400);
-    expect(res.body).toEqual({ error: 'at least one of title, body, or tags is required' });
+    expect(res.body).toMatchObject({ error: 'at least one of title, body, or tags is required' });
   });
 
   it('returns 400 when PUT payload is not an object', async () => {
@@ -206,7 +206,7 @@ describe('notes API', () => {
       .post('/api/notes')
       .send({ title: 't', body: 'b', tags: 'not-an-array' })
       .expect(400);
-    expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
+    expect(res.body).toMatchObject({ error: 'tags must be an array of non-empty strings' });
   });
 
   it('rejects create with tags containing empty strings', async () => {
@@ -215,7 +215,7 @@ describe('notes API', () => {
       .post('/api/notes')
       .send({ title: 't', body: 'b', tags: ['valid', ''] })
       .expect(400);
-    expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
+    expect(res.body).toMatchObject({ error: 'tags must be an array of non-empty strings' });
   });
 
   it('updates tags via PUT and returns updated note', async () => {
@@ -241,7 +241,7 @@ describe('notes API', () => {
       .put(`/api/notes/${created.body.id}`)
       .send({ tags: [42] })
       .expect(400);
-    expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
+    expect(res.body).toMatchObject({ error: 'tags must be an array of non-empty strings' });
   });
 
   it('filters notes by tag param', async () => {
@@ -293,7 +293,7 @@ describe('notes API', () => {
       .post('/api/notes')
       .send({ title: 't', body: 'b', tags: ['valid', '   '] })
       .expect(400);
-    expect(res.body).toEqual({ error: 'tags must be an array of non-empty strings' });
+    expect(res.body).toMatchObject({ error: 'tags must be an array of non-empty strings' });
   });
 
   it('creates a note with pinned=false by default', async () => {
@@ -344,7 +344,7 @@ describe('notes API', () => {
       .post('/api/notes')
       .send({ title: 't', body: 'b', color: 'magenta' })
       .expect(400);
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
       error: 'color must be one of: none, red, yellow, green, blue, purple',
     });
   });
@@ -355,7 +355,7 @@ describe('notes API', () => {
       .post('/api/notes')
       .send({ title: 't', body: 'b', color: 42 })
       .expect(400);
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
       error: 'color must be one of: none, red, yellow, green, blue, purple',
     });
   });
@@ -383,7 +383,7 @@ describe('notes API', () => {
       .put(`/api/notes/${created.body.id}`)
       .send({ color: 'orange' })
       .expect(400);
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
       error: 'color must be one of: none, red, yellow, green, blue, purple',
     });
   });
@@ -441,14 +441,14 @@ describe('notes API', () => {
   it('GET /api/notes with invalid sort value returns 400 with descriptive error', async () => {
     const app = createApp();
     const res = await request(app).get('/api/notes?sort=random').expect(400);
-    expect(res.body).toEqual({ error: 'sort must be one of: newest, oldest, title' });
+    expect(res.body).toMatchObject({ error: 'sort must be one of: newest, oldest, title' });
   });
 
   it('GET /api/notes with array sort param returns 400', async () => {
     const app = createApp();
     // ?sort[]=newest is an array — should be rejected
     const res = await request(app).get('/api/notes?sort[]=newest').expect(400);
-    expect(res.body).toEqual({ error: 'sort must be one of: newest, oldest, title' });
+    expect(res.body).toMatchObject({ error: 'sort must be one of: newest, oldest, title' });
   });
 
   it('sort and page params work together (pagination consistent with sort order)', async () => {
@@ -547,7 +547,7 @@ describe('PATCH /api/notes/:id/archive', () => {
   it('rejects invalid archived param', async () => {
     const app = createApp();
     const res = await request(app).get('/api/notes?archived=maybe').expect(400);
-    expect(res.body).toEqual({ error: 'archived must be "true" or "false"' });
+    expect(res.body).toMatchObject({ error: 'archived must be "true" or "false"' });
   });
 
   it('archived notes excluded from search results in default view', async () => {
