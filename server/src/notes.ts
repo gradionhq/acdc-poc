@@ -1,8 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
-import { NOTE_COLORS, NoteStore, type NoteColor, type SortOrder, type TagMode } from './store.js';
-
-const VALID_SORT_VALUES: readonly SortOrder[] = ['newest', 'oldest', 'title'];
+import { NoteStore, type TagMode } from './store.js';
+import { createNoteSchema, listNotesQuerySchema, parse, updateNoteSchema } from './schemas.js';
 
 /** Bulk actions accepted by POST /api/notes/batch. */
 const BATCH_ACTIONS = [
@@ -66,13 +65,6 @@ function batchActionFor(
   }
 }
 
-function parseSortOrder(value: unknown): SortOrder | null {
-  if (value === undefined) return 'newest';
-  if (typeof value !== 'string') return null;
-  if ((VALID_SORT_VALUES as readonly string[]).includes(value)) return value as SortOrder;
-  return null;
-}
-
 /**
  * Encode a filename for use in a Content-Disposition header following
  * RFC 6266 / RFC 5987.  Emits both the quoted ASCII fallback (non-ASCII
@@ -133,59 +125,26 @@ const upload = multer({
   },
 });
 
-function parsePositiveInt(value: unknown, fallback: number): number {
-  const n = Number(value);
-  return Number.isInteger(n) && n >= 1 ? n : fallback;
-}
-
-function parseTags(value: unknown): string[] | null {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) return null;
-  const normalized: string[] = [];
-  for (const item of value) {
-    if (typeof item !== 'string') return null;
-    const trimmed = item.trim();
-    if (trimmed === '') return null;
-    normalized.push(trimmed);
-  }
-  return [...new Set(normalized)];
-}
-
-const COLOR_ERROR = `color must be one of: ${NOTE_COLORS.join(', ')}`;
-
-/**
- * Validate a color field from client input.
- * Returns the parsed NoteColor on success, or null when the value is invalid.
- * Returns undefined when the field is absent (caller treats as "use default").
- */
-function parseColor(value: unknown): NoteColor | null | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string') return null;
-  if ((NOTE_COLORS as readonly string[]).includes(value)) return value as NoteColor;
-  return null;
-}
-
 export function createNotesRouter(store: NoteStore): Router {
   const router = Router();
 
   router.get('/', (req: Request, res: Response) => {
-    const page = parsePositiveInt(req.query.page, 1);
-    const pageSize = parsePositiveInt(req.query.pageSize, 10);
-    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
-    const tag = typeof req.query.tag === 'string' ? req.query.tag : undefined;
-    const sort = parseSortOrder(req.query.sort);
-    if (sort === null) {
-      res.status(400).json({ error: 'sort must be one of: newest, oldest, title' });
+    const parsed = parse(listNotesQuerySchema, req.query);
+    if (!parsed.ok) {
+      res.status(400).json(parsed.failure);
       return;
     }
-    const archivedParam = req.query.archived;
-    if (archivedParam !== undefined && archivedParam !== 'true' && archivedParam !== 'false') {
-      res.status(400).json({ error: 'archived must be "true" or "false"' });
-      return;
-    }
+    const {
+      page,
+      pageSize,
+      q,
+      tag,
+      sort = 'newest',
+      archived: archivedParam,
+      tags: tagsParam,
+    } = parsed.data;
     const archived = archivedParam === 'true';
     // Multi-tag filter: ?tags=a,b (comma-separated string) — missing or empty → no filter.
-    const tagsParam = req.query.tags;
     const tags =
       typeof tagsParam === 'string' && tagsParam.trim() !== ''
         ? tagsParam
@@ -193,9 +152,7 @@ export function createNotesRouter(store: NoteStore): Router {
             .map((t) => t.trim())
             .filter((t) => t !== '')
         : [];
-    // tagMode: 'and' | 'or' — missing or invalid defaults to 'or'.
-    const tagModeParam = req.query.tagMode;
-    const tagMode: TagMode = tagModeParam === 'and' || tagModeParam === 'or' ? tagModeParam : 'or';
+    const tagMode: TagMode = parsed.data.tagMode;
     const result = store.list(page, pageSize, q, tag, sort, archived, tags, tagMode);
     // Richer pagination metadata so the client consumes it instead of inferring.
     // X-Total-Count is retained for backward compatibility.
@@ -206,32 +163,18 @@ export function createNotesRouter(store: NoteStore): Router {
   });
 
   router.post('/', (req: Request, res: Response) => {
-    const { title, body, tags, color } = (req.body ?? {}) as {
-      title?: unknown;
-      body?: unknown;
-      tags?: unknown;
-      color?: unknown;
-    };
-    if (typeof title !== 'string' || typeof body !== 'string') {
-      res.status(400).json({ error: 'title and body must be strings' });
+    const parsed = parse(createNoteSchema, req.body ?? {});
+    if (!parsed.ok) {
+      res.status(400).json(parsed.failure);
       return;
     }
-    const parsedTags = parseTags(tags);
-    if (parsedTags === null) {
-      res.status(400).json({ error: 'tags must be an array of non-empty strings' });
-      return;
-    }
-    const parsedColor = parseColor(color);
-    if (parsedColor === null) {
-      res.status(400).json({ error: COLOR_ERROR });
-      return;
-    }
+    const { title, body, tags, color } = parsed.data;
     res.status(201).json(
       store.create({
         title,
         body,
-        tags: parsedTags,
-        ...(parsedColor !== undefined ? { color: parsedColor } : {}),
+        tags: tags ?? [],
+        ...(color !== undefined ? { color } : {}),
       }),
     );
   });
@@ -318,57 +261,24 @@ export function createNotesRouter(store: NoteStore): Router {
   });
 
   router.put('/:id', (req: Request, res: Response) => {
-    const payload = req.body;
+    const payload: unknown = req.body;
+    // Shape guard: zod's object schema would also reject these, but the legacy
+    // contract returns this specific message for non-object bodies.
     if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
       res.status(400).json({ error: 'payload must be an object' });
       return;
     }
-    const { title, body, tags, color } = payload as {
-      title?: unknown;
-      body?: unknown;
-      tags?: unknown;
-      color?: unknown;
-    };
-    if (title === undefined && body === undefined && tags === undefined && color === undefined) {
-      res.status(400).json({ error: 'at least one of title, body, or tags is required' });
+    const parsed = parse(updateNoteSchema, payload);
+    if (!parsed.ok) {
+      res.status(400).json(parsed.failure);
       return;
     }
-    if (title !== undefined && typeof title !== 'string') {
-      res.status(400).json({ error: 'title must be a string' });
-      return;
-    }
-    if (body !== undefined && typeof body !== 'string') {
-      res.status(400).json({ error: 'body must be a string' });
-      return;
-    }
-    const parsedColor = parseColor(color);
-    if (parsedColor === null) {
-      res.status(400).json({ error: COLOR_ERROR });
-      return;
-    }
-    if (tags !== undefined) {
-      const parsedTags = parseTags(tags);
-      if (parsedTags === null) {
-        res.status(400).json({ error: 'tags must be an array of non-empty strings' });
-        return;
-      }
-      const note = store.update(req.params.id, {
-        title,
-        body,
-        tags: parsedTags,
-        ...(parsedColor !== undefined ? { color: parsedColor } : {}),
-      });
-      if (!note) {
-        res.status(404).json({ error: 'not found' });
-        return;
-      }
-      res.json(note);
-      return;
-    }
+    const { title, body, tags, color } = parsed.data;
     const note = store.update(req.params.id, {
       title,
       body,
-      ...(parsedColor !== undefined ? { color: parsedColor } : {}),
+      ...(tags !== undefined ? { tags } : {}),
+      ...(color !== undefined ? { color } : {}),
     });
     if (!note) {
       res.status(404).json({ error: 'not found' });

@@ -38,6 +38,7 @@ vi.mock('lucide-react', () => {
     ChevronLeft: IconStub,
     ChevronRight: IconStub,
     Copy: IconStub,
+    Download: IconStub,
     FileText: IconStub,
     Heading2: IconStub,
     HelpCircle: IconStub,

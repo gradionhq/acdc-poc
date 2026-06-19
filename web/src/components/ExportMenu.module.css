@@ -1,0 +1,68 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  transition: var(--transition-colors);
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.trigger:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-primary);
+}
+
+.trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  z-index: 100;
+  min-width: 11rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-1) 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text);
+  text-align: left;
+  width: 100%;
+  transition: background-color 0.1s ease;
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  background-color: var(--color-surface-raised);
+  outline: none;
+}
