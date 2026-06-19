@@ -20,6 +20,7 @@ import {
   permanentDeleteNote,
   rateLimitMessage,
   RateLimitError,
+  reorderPins,
   restoreNote,
   listTags,
   toggleArchive,
@@ -55,6 +56,7 @@ import { Button } from './components/Button';
 import { useSelection, selectAllStateFor } from './useSelection';
 import { CheckSquare } from 'lucide-react';
 import { exportNotes, type ExportFormat } from './noteExport';
+import { dropPin, movePin, sameOrder } from './reorderPins';
 import styles from './App.module.css';
 
 const PAGE_SIZE = 5;
@@ -532,6 +534,43 @@ export function App() {
     }
   }
 
+  /**
+   * Reorder the pinned group and persist the new order via the API.
+   *
+   * Pinned notes always sort first but may span multiple pages, so we fetch the
+   * full active list to recover the complete pinned order (the server requires
+   * the entire set). The new order is computed by the pure {@link movePin} /
+   * {@link dropPin} helpers, sent to the server, then the visible page is
+   * refreshed. A no-op move (already at the edge, dropped on itself) skips the
+   * request entirely.
+   */
+  async function onReorderPin(
+    id: string,
+    move: { direction: 'up' | 'down' } | { targetId: string },
+  ) {
+    try {
+      // Recover the complete top-to-bottom pinned order across all pages.
+      const probe = await listNotes(1, PAGE_SIZE, '', '', sort);
+      const full = probe.total <= PAGE_SIZE ? probe : await listNotes(1, probe.total, '', '', sort);
+      const pinnedOrder = full.notes
+        .filter((n) => n.pinned && n.deletedAt === null)
+        .map((n) => n.id);
+
+      const next =
+        'direction' in move
+          ? movePin(pinnedOrder, id, move.direction)
+          : dropPin(pinnedOrder, id, move.targetId);
+
+      if (sameOrder(pinnedOrder, next)) return; // nothing actually moved
+      await reorderPins(next);
+      setError(null);
+      await refresh(page);
+    } catch (e: unknown) {
+      notifyError(e, 'Failed to reorder pinned notes');
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
+    }
+  }
+
   async function onToggleArchive(id: string, currentlyArchived: boolean) {
     try {
       await toggleArchive(id);
@@ -974,6 +1013,7 @@ export function App() {
       onEditStart={onEditStart}
       onTogglePin={(id, pinned) => void onTogglePin(id, pinned)}
       onToggleArchive={(id, archived) => void onToggleArchive(id, archived)}
+      onReorderPin={showTrash ? undefined : (id, move) => void onReorderPin(id, move)}
       onDeleteRequest={onDeleteRequest}
       onDuplicate={(id) => void onDuplicate(id)}
       onRestore={(id) => void onRestore(id)}

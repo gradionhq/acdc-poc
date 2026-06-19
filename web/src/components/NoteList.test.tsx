@@ -1,6 +1,6 @@
 import { createRef } from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { NoteList, type NoteListProps } from './NoteList';
 import type { Note, NoteColor } from '../api';
 
@@ -55,6 +55,10 @@ function makeProps(overrides: Partial<NoteListProps> = {}): NoteListProps {
     newNoteTitleRef: createRef<HTMLInputElement>(),
     ...overrides,
   };
+}
+
+function makePinned(i: number): Note {
+  return { ...makeNote(i), pinned: true };
 }
 
 describe('NoteList rendering', () => {
@@ -154,5 +158,88 @@ describe('NoteList selection plumbing', () => {
   it('renders no checkboxes when not selectable', () => {
     render(<NoteList {...makeProps({ notes: [makeNote(1)] })} />);
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+});
+
+describe('NoteList pinned reordering', () => {
+  it('shows reorder controls for each pinned note when 2+ are pinned', () => {
+    const onReorderPin = vi.fn();
+    render(
+      <NoteList
+        {...makeProps({ notes: [makePinned(1), makePinned(2), makeNote(3)], onReorderPin })}
+      />,
+    );
+    // Drag handles + move buttons appear for the two pinned notes, not the plain one.
+    expect(screen.getAllByRole('button', { name: /drag to reorder/i })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /move note \d+ up/i })).toHaveLength(2);
+  });
+
+  it('shows no reorder controls when only one note is pinned', () => {
+    render(
+      <NoteList {...makeProps({ notes: [makePinned(1), makeNote(2)], onReorderPin: vi.fn() })} />,
+    );
+    expect(screen.queryByRole('button', { name: /drag to reorder/i })).not.toBeInTheDocument();
+  });
+
+  it('shows no reorder controls when onReorderPin is absent', () => {
+    render(<NoteList {...makeProps({ notes: [makePinned(1), makePinned(2)] })} />);
+    expect(screen.queryByRole('button', { name: /drag to reorder/i })).not.toBeInTheDocument();
+  });
+
+  it('shows no reorder controls in selection mode', () => {
+    render(
+      <NoteList
+        {...makeProps({
+          notes: [makePinned(1), makePinned(2)],
+          onReorderPin: vi.fn(),
+          selectable: true,
+        })}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /drag to reorder/i })).not.toBeInTheDocument();
+  });
+
+  it('disables Move up on the first pinned note and Move down on the last', () => {
+    render(
+      <NoteList {...makeProps({ notes: [makePinned(1), makePinned(2)], onReorderPin: vi.fn() })} />,
+    );
+    expect(screen.getByRole('button', { name: 'Move Note 1 up' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move Note 1 down' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Move Note 2 up' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Move Note 2 down' })).toBeDisabled();
+  });
+
+  it('forwards a keyboard move down with the note id and direction', async () => {
+    const onReorderPin = vi.fn();
+    render(<NoteList {...makeProps({ notes: [makePinned(1), makePinned(2)], onReorderPin })} />);
+    const { default: userEvent } = await import('@testing-library/user-event');
+    await userEvent.click(screen.getByRole('button', { name: 'Move Note 1 down' }));
+    expect(onReorderPin).toHaveBeenCalledWith('1', { direction: 'down' });
+  });
+
+  it('forwards a keyboard move up with the note id and direction', async () => {
+    const onReorderPin = vi.fn();
+    render(<NoteList {...makeProps({ notes: [makePinned(1), makePinned(2)], onReorderPin })} />);
+    const { default: userEvent } = await import('@testing-library/user-event');
+    await userEvent.click(screen.getByRole('button', { name: 'Move Note 2 up' }));
+    expect(onReorderPin).toHaveBeenCalledWith('2', { direction: 'up' });
+  });
+
+  it('forwards a drag-and-drop reorder with the dragged and target ids', () => {
+    const onReorderPin = vi.fn();
+    render(
+      <NoteList
+        {...makeProps({ notes: [makePinned(1), makePinned(2), makePinned(3)], onReorderPin })}
+      />,
+    );
+    const handles = screen.getAllByRole('button', { name: /drag to reorder/i });
+    const rows = within(screen.getByRole('list', { name: 'Notes list' })).getAllByRole('listitem');
+
+    // Drag note 1 (first handle) and drop it on note 3 (third row).
+    fireEvent.dragStart(handles[0]);
+    fireEvent.dragOver(rows[2]);
+    fireEvent.drop(rows[2]);
+
+    expect(onReorderPin).toHaveBeenCalledWith('1', { targetId: '3' });
   });
 });

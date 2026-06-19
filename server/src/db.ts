@@ -63,6 +63,13 @@ const MIGRATIONS: readonly string[] = [
   );
   INSERT INTO meta (key, value) VALUES ('seq', 0);
   `,
+  // v2 — explicit ordering for pinned notes. NULL for unpinned notes (and for
+  // notes pinned before this migration); a smaller value sorts earlier among
+  // the pinned group. Unpinned notes keep NULL so they fall back to the normal
+  // secondary sort.
+  `
+  ALTER TABLE notes ADD COLUMN pinnedOrder INTEGER;
+  `,
 ];
 
 /**

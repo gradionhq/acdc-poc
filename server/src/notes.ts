@@ -1,7 +1,13 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 import { NoteStore, type TagMode } from './store.js';
-import { createNoteSchema, listNotesQuerySchema, parse, updateNoteSchema } from './schemas.js';
+import {
+  createNoteSchema,
+  listNotesQuerySchema,
+  parse,
+  reorderPinsSchema,
+  updateNoteSchema,
+} from './schemas.js';
 
 /** Bulk actions accepted by POST /api/notes/batch. */
 const BATCH_ACTIONS = [
@@ -242,6 +248,44 @@ export function createNotesRouter(store: NoteStore): Router {
       }
     }
     res.json({ action, succeeded, failed });
+  });
+
+  /**
+   * PATCH /api/notes/pin-order — persist a new top-to-bottom order for the
+   * pinned notes.
+   *
+   * Body: { ids: string[] } — must list exactly the set of currently-pinned,
+   * active notes (no more, no fewer), in the desired order. Requiring the
+   * complete set keeps ordering unambiguous and guards against acting on a
+   * stale client view (e.g. a note pinned/unpinned in another tab). Responds:
+   *   - 200 { ids } on success (echoes the applied order),
+   *   - 400 when the body is malformed,
+   *   - 409 when the ids do not match the current pinned set.
+   *
+   * Registered before /:id so "pin-order" is never mistaken for a note id.
+   */
+  router.patch('/pin-order', (req: Request, res: Response) => {
+    const payload: unknown = req.body;
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+      res.status(400).json({ error: 'payload must be an object' });
+      return;
+    }
+    const parsed = parse(reorderPinsSchema, payload);
+    if (!parsed.ok) {
+      res.status(400).json(parsed.failure);
+      return;
+    }
+    const { ids } = parsed.data;
+    // The request must reference exactly the current pinned set — same members,
+    // no duplicates (already enforced), nothing missing or extra.
+    const current = store.pinnedIds();
+    const sameSet =
+      ids.length === current.length && new Set(ids).size === new Set([...ids, ...current]).size;
+    if (!sameSet || !store.reorderPinned(ids)) {
+      res.status(409).json({ error: 'ids must match the current set of pinned notes' });
+      return;
+    }
+    res.json({ ids });
   });
 
   // --- Trash endpoints (must be registered before /:id to avoid path conflicts) ---

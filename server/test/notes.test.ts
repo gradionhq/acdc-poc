@@ -937,3 +937,88 @@ describe('notes API — multi-tag filter', () => {
     expect((res.body as Array<{ title: string }>)[0].title).toBe('tagged');
   });
 });
+
+describe('PATCH /api/notes/pin-order', () => {
+  /** Create three notes and pin them all (pinned in order a, b, c). */
+  async function setupThreePinned(app: ReturnType<typeof createApp>) {
+    const ids: string[] = [];
+    for (const title of ['a', 'b', 'c']) {
+      const res = await request(app).post('/api/notes').send({ title, body: 'b' }).expect(201);
+      ids.push(res.body.id as string);
+    }
+    for (const id of ids) {
+      await request(app).patch(`/api/notes/${id}/pin`).expect(200);
+    }
+    return ids;
+  }
+
+  it('persists a new order for the pinned notes', async () => {
+    const app = createApp();
+    const [a, b, c] = await setupThreePinned(app);
+
+    const res = await request(app)
+      .patch('/api/notes/pin-order')
+      .send({ ids: [c, a, b] })
+      .expect(200);
+    expect(res.body).toEqual({ ids: [c, a, b] });
+
+    // The list now returns the pinned notes in the persisted order.
+    const list = await request(app).get('/api/notes?pageSize=10').expect(200);
+    expect((list.body as Array<{ id: string }>).map((n) => n.id)).toEqual([c, a, b]);
+  });
+
+  it('is not mistaken for a note id (route precedence over /:id)', async () => {
+    const app = createApp();
+    await setupThreePinned(app);
+    // A GET /:id for "pin-order" would 404; the PATCH route must win and 400 on
+    // a missing body rather than treat "pin-order" as an id.
+    await request(app).patch('/api/notes/pin-order').send({}).expect(400);
+  });
+
+  it('rejects a non-object body with 400', async () => {
+    const app = createApp();
+    await request(app).patch('/api/notes/pin-order').send([1, 2]).expect(400);
+  });
+
+  it('rejects an empty ids array with 400', async () => {
+    const app = createApp();
+    await request(app).patch('/api/notes/pin-order').send({ ids: [] }).expect(400);
+  });
+
+  it('rejects duplicate ids with 400', async () => {
+    const app = createApp();
+    const [a] = await setupThreePinned(app);
+    await request(app)
+      .patch('/api/notes/pin-order')
+      .send({ ids: [a, a] })
+      .expect(400);
+  });
+
+  it('returns 409 when the ids do not match the current pinned set', async () => {
+    const app = createApp();
+    const [a, b] = await setupThreePinned(app);
+    // Missing one pinned id → incomplete set.
+    await request(app)
+      .patch('/api/notes/pin-order')
+      .send({ ids: [a, b] })
+      .expect(409);
+  });
+
+  it('returns 409 when an id is not a pinned note', async () => {
+    const app = createApp();
+    const pinned = await request(app)
+      .post('/api/notes')
+      .send({ title: 'pinned', body: 'b' })
+      .expect(201);
+    await request(app).patch(`/api/notes/${pinned.body.id}/pin`).expect(200);
+    const unpinned = await request(app)
+      .post('/api/notes')
+      .send({ title: 'plain', body: 'b' })
+      .expect(201);
+
+    await request(app)
+      .patch('/api/notes/pin-order')
+      .send({ ids: [pinned.body.id, unpinned.body.id] })
+      .expect(409);
+  });
+});

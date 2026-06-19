@@ -89,6 +89,24 @@ export const setTagColorSchema = z.object({
 /** Tag-name route param (PUT/DELETE /api/tags/:name). */
 export const tagNameParamSchema = z.object({ tag: tagName('tag') });
 
+/**
+ * PATCH /api/notes/pin-order body — the desired top-to-bottom order of the
+ * pinned notes, given as a non-empty array of unique note-id strings.
+ */
+export const reorderPinsSchema = z.object({
+  ids: z
+    .array(
+      z
+        .string({ error: 'ids must be an array of non-empty strings' })
+        .refine((s) => s.trim() !== '', { error: 'ids must be an array of non-empty strings' }),
+      { error: 'ids must be an array of non-empty strings' },
+    )
+    .min(1, { error: 'ids must be a non-empty array' })
+    .refine((arr) => new Set(arr).size === arr.length, {
+      error: 'ids must not contain duplicates',
+    }),
+});
+
 /** GET /api/notes query parameters. */
 export const listNotesQuerySchema = z.object({
   page: z.coerce.number().int().min(1).catch(1),

@@ -449,3 +449,65 @@
     gap: var(--space-1);
   }
 }
+
+/* ── Pinned-note reorder controls ─────────────────────────────── */
+
+.reorderControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.dragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1);
+  border-radius: var(--radius-base);
+  color: var(--color-text-subtle);
+  cursor: grab;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
+}
+
+.reorderBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-1);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-base);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.reorderBtn:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.reorderBtn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.reorderBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.noteCardDragging {
+  opacity: 0.5;
+  border-style: dashed;
+}

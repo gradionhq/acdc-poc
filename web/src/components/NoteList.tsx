@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import { FileText, SearchX } from 'lucide-react';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import { Button } from './Button';
@@ -7,7 +7,7 @@ import type { Note } from '../api';
 import styles from './NoteList.module.css';
 
 /** All props that NoteList passes through to each NoteCard, plus NoteList-specific props. */
-export type NoteListProps = Omit<NoteCardProps, 'note' | 'selected'> & {
+export type NoteListProps = Omit<NoteCardProps, 'note' | 'selected' | 'reorder'> & {
   notes: Note[];
   initialLoading: boolean;
   isFilterActive: boolean;
@@ -16,6 +16,13 @@ export type NoteListProps = Omit<NoteCardProps, 'note' | 'selected'> & {
   newNoteTitleRef: RefObject<HTMLInputElement>;
   /** Predicate resolving whether a given note id is selected (selection mode). */
   isSelected?: (id: string) => boolean;
+  /**
+   * Persist a reorder of the pinned group. `id` is the moved note; `direction`
+   * (keyboard) nudges it one step, while `targetId` (drag) drops it onto another
+   * pinned note. When omitted, reorder controls are not shown. Disabled in
+   * selection mode and while editing — both make reordering ambiguous.
+   */
+  onReorderPin?: (id: string, move: { direction: 'up' | 'down' } | { targetId: string }) => void;
 };
 
 /**
@@ -36,8 +43,55 @@ const ESTIMATED_ROW_HEIGHT = 140;
 /** Number of off-screen rows to render on each side of the viewport. */
 const OVERSCAN = 6;
 
+/** Resolves per-note reorder props, or undefined when a note is not reorderable. */
+type ReorderResolver = (note: Note) => NoteCardProps['reorder'];
+
+/**
+ * Build the reorder resolver for the current render. Reordering applies only to
+ * the pinned group, and only when not editing and not in selection mode — both
+ * make in-place reordering ambiguous. Drag state (which note is being dragged)
+ * is local to the list so it resets cleanly on every drop/cancel.
+ */
+function useReorder(props: NoteListProps): ReorderResolver {
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const { onReorderPin, notes, selectable, editingId } = props;
+
+  // The pinned group, top-to-bottom, as currently displayed. Pinned notes
+  // always sort first, so this is a prefix of `notes`.
+  const pinnedIds = notes.filter((n) => n.pinned && n.deletedAt === null).map((n) => n.id);
+
+  return (note: Note) => {
+    const reorderActive = onReorderPin !== undefined && !selectable && editingId === null;
+    if (!reorderActive || !note.pinned || note.deletedAt !== null || pinnedIds.length < 2) {
+      return undefined;
+    }
+    const position = pinnedIds.indexOf(note.id);
+    return {
+      position,
+      total: pinnedIds.length,
+      isDragging: draggingId === note.id,
+      onMove: (id, direction) => onReorderPin(id, { direction }),
+      onDragStart: (id) => setDraggingId(id),
+      onDragEnd: () => setDraggingId(null),
+      onDragOverNote: (_id, e) => {
+        // Only intercept when a pinned note is mid-drag, so other drag sources
+        // (e.g. attachment file drops) are unaffected.
+        if (draggingId !== null) e.preventDefault();
+      },
+      onDropNote: (id, e) => {
+        e.preventDefault();
+        if (draggingId !== null && draggingId !== id) {
+          onReorderPin(draggingId, { targetId: id });
+        }
+        setDraggingId(null);
+      },
+    };
+  };
+}
+
 export function NoteList(props: NoteListProps) {
   const { notes, initialLoading, isFilterActive, showEmptyState, newNoteTitleRef } = props;
+  const reorderFor = useReorder(props);
 
   return (
     <section aria-label="Notes" className={styles.noteListRegion}>
@@ -83,7 +137,7 @@ export function NoteList(props: NoteListProps) {
           <VirtualNoteList {...props} />
         ) : (
           <ul className={styles.noteList} aria-label="Notes list">
-            {notes.map((n) => renderCard(n, props))}
+            {notes.map((n) => renderCard(n, props, reorderFor))}
           </ul>
         ))}
     </section>
@@ -99,6 +153,7 @@ export function NoteList(props: NoteListProps) {
  */
 function VirtualNoteList(props: NoteListProps) {
   const { notes } = props;
+  const reorderFor = useReorder(props);
   const listRef = useRef<HTMLUListElement>(null);
 
   const virtualizer = useWindowVirtualizer({
@@ -121,7 +176,7 @@ function VirtualNoteList(props: NoteListProps) {
     >
       {items.map((item) => {
         const note = notes[item.index];
-        return renderCard(note, props, {
+        return renderCard(note, props, reorderFor, {
           ref: virtualizer.measureElement,
           'data-index': item.index,
           'aria-setsize': notes.length,
@@ -140,11 +195,17 @@ function VirtualNoteList(props: NoteListProps) {
 }
 
 /** Render a single NoteCard, forwarding every pass-through prop from NoteList. */
-function renderCard(note: Note, props: NoteListProps, rowProps?: NoteCardRowProps) {
+function renderCard(
+  note: Note,
+  props: NoteListProps,
+  reorderFor: ReorderResolver,
+  rowProps?: NoteCardRowProps,
+) {
   return (
     <NoteCard
       key={note.id}
       note={note}
+      reorder={reorderFor(note)}
       tagColors={props.tagColors}
       editingId={props.editingId}
       editTitle={props.editTitle}

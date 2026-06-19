@@ -354,6 +354,25 @@ export async function togglePin(id: string): Promise<Note> {
   return toNote(updated);
 }
 
+/**
+ * Persist a new top-to-bottom order for the pinned notes via
+ * `PATCH /api/notes/pin-order`. `ids` must list exactly the current set of
+ * pinned note ids in the desired order. Resolves once the server has stored the
+ * order; the caller refreshes the list to reflect it.
+ */
+export async function reorderPins(ids: string[]): Promise<void> {
+  const res = await fetch(`${base}/pin-order`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to reorder pinned notes');
+  }
+}
+
 export async function toggleArchive(id: string): Promise<Note> {
   const res = await fetch(`${base}/${id}/archive`, { method: 'PATCH' });
   if (!res.ok) {

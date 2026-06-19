@@ -255,6 +255,105 @@ describe('NoteStore', () => {
   });
 });
 
+describe('NoteStore — pinned reordering', () => {
+  it('new notes have a null pinnedOrder', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 'a', body: 'A' });
+    expect(n.pinnedOrder).toBeNull();
+  });
+
+  it('assigns an increasing pinnedOrder as notes are pinned', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'A' });
+    const b = store.create({ title: 'b', body: 'B' });
+    const pinnedA = store.togglePin(a.id);
+    const pinnedB = store.togglePin(b.id);
+    expect(pinnedA?.pinnedOrder).toBe(0);
+    expect(pinnedB?.pinnedOrder).toBe(1);
+  });
+
+  it('clears pinnedOrder back to null when a note is unpinned', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'A' });
+    store.togglePin(a.id);
+    const unpinned = store.togglePin(a.id);
+    expect(unpinned?.pinned).toBe(false);
+    expect(unpinned?.pinnedOrder).toBeNull();
+  });
+
+  it('reorderPinned applies the supplied top-to-bottom order', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'A' });
+    const b = store.create({ title: 'b', body: 'B' });
+    const c = store.create({ title: 'c', body: 'C' });
+    store.togglePin(a.id);
+    store.togglePin(b.id);
+    store.togglePin(c.id);
+
+    // Pinning order is a, b, c → pinnedOrder 0,1,2 → list order is a, b, c.
+    expect(store.list(1, 10).items.map((n) => n.id)).toEqual([a.id, b.id, c.id]);
+
+    const ok = store.reorderPinned([c.id, a.id, b.id]);
+    expect(ok).toBe(true);
+    const items = store.list(1, 10).items;
+    expect(items.map((n) => n.id)).toEqual([c.id, a.id, b.id]);
+    expect(items.map((n) => n.pinnedOrder)).toEqual([0, 1, 2]);
+  });
+
+  it('reorderPinned rejects (and changes nothing) when an id is missing', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'A' });
+    const b = store.create({ title: 'b', body: 'B' });
+    store.togglePin(a.id);
+    store.togglePin(b.id);
+    const before = store.list(1, 10).items.map((n) => n.id);
+
+    expect(store.reorderPinned([a.id, 'nope'])).toBe(false);
+    expect(store.list(1, 10).items.map((n) => n.id)).toEqual(before);
+  });
+
+  it('reorderPinned rejects when an id refers to an unpinned note', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'A' });
+    const b = store.create({ title: 'b', body: 'B' });
+    store.togglePin(a.id); // a pinned, b not
+    expect(store.reorderPinned([a.id, b.id])).toBe(false);
+  });
+
+  it('reorderPinned rejects when an id refers to a trashed note', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'A' });
+    store.togglePin(a.id);
+    store.trash(a.id);
+    expect(store.reorderPinned([a.id])).toBe(false);
+  });
+
+  it('pinnedIds lists only active pinned notes', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'a', body: 'A' });
+    const b = store.create({ title: 'b', body: 'B' });
+    const c = store.create({ title: 'c', body: 'C' });
+    store.togglePin(a.id);
+    store.togglePin(b.id);
+    store.trash(b.id);
+    void c;
+    expect(store.pinnedIds()).toEqual([a.id]);
+  });
+
+  it('reordered pins keep their order ahead of the secondary sort', () => {
+    const store = new NoteStore();
+    const a = store.create({ title: 'Zebra', body: 'b' });
+    const b = store.create({ title: 'Apple', body: 'b' });
+    store.togglePin(a.id);
+    store.togglePin(b.id);
+    store.reorderPinned([b.id, a.id]);
+    // title sort would order Apple before Zebra anyway, but newest would not;
+    // assert the explicit order wins under 'newest'.
+    const items = store.list(1, 10, undefined, undefined, 'newest').items;
+    expect(items.map((n) => n.id)).toEqual([b.id, a.id]);
+  });
+});
+
 describe('NoteStore — archive', () => {
   it('creates a note with archived=false by default', () => {
     const store = new NoteStore();
