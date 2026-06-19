@@ -131,6 +131,97 @@ const upload = multer({
   },
 });
 
+/** 1 MB upper bound for an imported Markdown file. */
+const MAX_MARKDOWN_BYTES = 1 * 1024 * 1024;
+
+/**
+ * Content types accepted for Markdown import. Browsers and clients are
+ * inconsistent about the MIME type of `.md` files, so we accept the common
+ * variants plus `text/plain` and the generic octet-stream fallback. The
+ * `.md`/`.markdown` extension is also enforced (see {@link markdownFileFilter}).
+ */
+const ALLOWED_MARKDOWN_CONTENT_TYPES = new Set([
+  'text/markdown',
+  'text/x-markdown',
+  'text/plain',
+  'application/octet-stream',
+]);
+
+/** True when the filename ends in a recognised Markdown extension. */
+function hasMarkdownExtension(filename: string): boolean {
+  return /\.(md|markdown)$/i.test(filename);
+}
+
+function markdownFileFilter(
+  _req: Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback,
+): void {
+  if (!ALLOWED_MARKDOWN_CONTENT_TYPES.has(file.mimetype)) {
+    cb(new Error(`unsupported content type: ${file.mimetype}`));
+    return;
+  }
+  if (!hasMarkdownExtension(file.originalname)) {
+    cb(new Error('file must have a .md or .markdown extension'));
+    return;
+  }
+  cb(null, true);
+}
+
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_MARKDOWN_BYTES, files: 1 },
+  fileFilter: markdownFileFilter,
+});
+
+/** Strip a leading UTF-8 byte-order mark, if present. */
+function stripBom(text: string): string {
+  return text.codePointAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/**
+ * Parse a Markdown document into a note title and body.
+ *
+ * The first ATX heading (`#` … `######`) found before any body content becomes
+ * the title, with its leading `#` markers and surrounding whitespace stripped;
+ * the remaining lines (after the heading) become the body. When no leading
+ * heading is present the whole document is the body and the title falls back to
+ * `'Untitled'`. Returns null when the document has no usable content at all.
+ */
+function parseMarkdown(raw: string): { title: string; body: string } | null {
+  const text = stripBom(raw).replace(/\r\n?/g, '\n');
+  const lines = text.split('\n');
+
+  let index = 0;
+  // Skip leading blank lines so a heading after blank lines is still detected.
+  while (index < lines.length && lines[index].trim() === '') index += 1;
+
+  if (index >= lines.length) return null;
+
+  // Detect an ATX heading (1-6 leading '#' then a space/tab) with pure string ops —
+  // no regex, so Sonar raises no ReDoS hotspot to review.
+  const line = lines[index];
+  let hashes = 0;
+  while (hashes < line.length && line[hashes] === '#') hashes += 1;
+  const sep = line[hashes];
+  if (hashes >= 1 && hashes <= 6 && (sep === ' ' || sep === '\t')) {
+    let title = line.slice(hashes).trim();
+    // CommonMark: a trailing run of '#' preceded by whitespace is a closing sequence — strip it.
+    let h = title.length;
+    while (h > 0 && title[h - 1] === '#') h -= 1;
+    if (h < title.length && h > 0 && (title[h - 1] === ' ' || title[h - 1] === '\t')) {
+      title = title.slice(0, h).trimEnd();
+    }
+    const body = lines
+      .slice(index + 1)
+      .join('\n')
+      .trim();
+    return { title: title === '' ? 'Untitled' : title, body };
+  }
+
+  return { title: 'Untitled', body: text.trim() };
+}
+
 export function createNotesRouter(store: NoteStore): Router {
   const router = Router();
 
@@ -248,6 +339,31 @@ export function createNotesRouter(store: NoteStore): Router {
       }
     }
     res.json({ action, succeeded, failed });
+  });
+
+  /**
+   * POST /api/notes/import — create a note from an uploaded Markdown file.
+   *
+   * Accepts a single `.md`/`.markdown` file under the `file` field. The upload
+   * is size-capped ({@link MAX_MARKDOWN_BYTES}) and content-type/extension
+   * validated ({@link markdownFileFilter}); oversized or invalid files are
+   * rejected by multer (413 / 400). The first leading heading becomes the note
+   * title and the remaining body becomes the note content.
+   */
+  router.post('/import', importUpload.single('file'), (req: Request, res: Response) => {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'file field is required' });
+      return;
+    }
+
+    const parsed = parseMarkdown(file.buffer.toString('utf8'));
+    if (!parsed) {
+      res.status(400).json({ error: 'file is empty' });
+      return;
+    }
+
+    res.status(201).json(store.create({ title: parsed.title, body: parsed.body, tags: [] }));
   });
 
   /**
