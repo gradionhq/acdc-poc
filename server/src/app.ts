@@ -7,7 +7,7 @@ import { NoteStore } from './store.js';
 import { createNotesRouter } from './notes.js';
 import { createTagsRouter } from './tags.js';
 import { createHealthRouter } from './health.js';
-import { createOpenApiRouter } from './openapi.js';
+import { createOpenApiRouter, createDocsRouter, docsEnabled } from './openapi.js';
 import { requestLogger } from './logger.js';
 import { createRateLimiter, createStaticRateLimiter } from './rateLimiter.js';
 import { createSecurityMiddleware } from './security.js';
@@ -27,6 +27,14 @@ export function createApp(store: NoteStore = new NoteStore()): Express {
 
   // Request logging (quiet in test env).
   app.use(requestLogger);
+
+  // Interactive API docs (Swagger UI) at /api/docs. Served outside production
+  // by default, or explicitly via ENABLE_API_DOCS=1 (see docsEnabled). Mounted
+  // BEFORE the /api rate limiter so the UI's many static-asset requests do not
+  // consume the API request budget — the docs surface is env-gated regardless.
+  if (docsEnabled()) {
+    app.use('/api/docs', createDocsRouter());
+  }
 
   // Rate limiting — applied to /api/* only (static assets are not subject to limits).
   // GET /api/health is exempt from rate limiting (see exemptPaths in rateLimiter.ts).
