@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 import { listNotes, type NoteColor } from './api';
@@ -2857,5 +2857,80 @@ describe('App — keyboard shortcuts', () => {
     });
 
     await waitFor(() => expect(searchInput).not.toHaveFocus());
+  });
+});
+
+describe('App — command palette (Cmd/Ctrl+K)', () => {
+  beforeEach(() => mockFetchSequence());
+
+  /** Open the palette via the Ctrl+K shortcut. */
+  async function openPalette() {
+    await userEvent.keyboard('{Control>}k{/Control}');
+    return screen.findByRole('dialog', { name: /command palette/i });
+  }
+
+  it('opens on Ctrl+K and lists the default action and view commands', async () => {
+    render(<App />);
+    const dialog = await openPalette();
+    const titles = within(dialog)
+      .getAllByRole('option')
+      .map((o) => o.textContent ?? '');
+    expect(titles).toContain('New noteAction');
+    expect(titles.some((t) => /switch to (dark|light) theme/i.test(t))).toBe(true);
+    expect(titles).toContain('Go to: ArchivedView');
+  });
+
+  it('toggles closed when Ctrl+K is pressed again', async () => {
+    render(<App />);
+    await openPalette();
+    await userEvent.keyboard('{Control>}k{/Control}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /command palette/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('closes on Escape', async () => {
+    render(<App />);
+    await openPalette();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /command palette/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('runs the "New note" action and opens the composer', async () => {
+    render(<App />);
+    await openPalette();
+    await userEvent.keyboard('{Enter}'); // first row is "New note"
+    expect(await screen.findByRole('dialog', { name: /new note/i })).toBeInTheDocument();
+  });
+
+  it('switches view via a "Go to" command', async () => {
+    render(<App />);
+    await openPalette();
+    await userEvent.click(screen.getByText('Go to: Archived'));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /show archived notes/i })).toHaveAttribute(
+        'aria-current',
+        'page',
+      ),
+    );
+  });
+
+  it('jumps to a note by title and reveals it in the list', async () => {
+    render(<App />);
+    await openComposer();
+    await userEvent.type(screen.getByLabelText(/^title$/i), 'Palette target note');
+    await userEvent.type(screen.getByLabelText(/^body$/i), 'body');
+    await userEvent.click(screen.getByRole('button', { name: /add note/i }));
+    await waitFor(() => expect(screen.getByText('Palette target note')).toBeInTheDocument());
+
+    await openPalette();
+    await userEvent.keyboard('Palette target');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /command palette/i })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText('Palette target note')).toBeInTheDocument();
   });
 });

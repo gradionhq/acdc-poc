@@ -165,4 +165,41 @@ describe('NoteComposer', () => {
     await userEvent.click(tagsInput);
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
+
+  describe('template picker', () => {
+    it('does not render the picker when onApplyTemplate is omitted', () => {
+      renderComposer();
+      expect(
+        screen.queryByRole('group', { name: /start from a template/i }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Meeting' })).not.toBeInTheDocument();
+    });
+
+    it('renders a button for each built-in template when onApplyTemplate is provided', () => {
+      renderComposer({ onApplyTemplate: vi.fn() });
+      expect(screen.getByRole('button', { name: 'Meeting' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'To-do' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Journal' })).toBeInTheDocument();
+    });
+
+    it('calls onApplyTemplate with the seed values when a template is chosen', async () => {
+      const onApplyTemplate = vi.fn();
+      renderComposer({ onApplyTemplate });
+      await userEvent.click(screen.getByRole('button', { name: 'Meeting' }));
+      expect(onApplyTemplate).toHaveBeenCalledTimes(1);
+      expect(onApplyTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Meeting notes',
+          tagsInput: 'meeting',
+          color: 'blue',
+        }),
+      );
+      expect(onApplyTemplate.mock.calls[0][0].body).toContain('## Agenda');
+    });
+
+    it('template buttons are type="button" so they do not submit the form', () => {
+      renderComposer({ onApplyTemplate: vi.fn() });
+      expect(screen.getByRole('button', { name: 'Journal' })).toHaveAttribute('type', 'button');
+    });
+  });
 });
