@@ -4,6 +4,68 @@ import { NOTE_COLORS, NoteStore, type NoteColor, type SortOrder, type TagMode } 
 
 const VALID_SORT_VALUES: readonly SortOrder[] = ['newest', 'oldest', 'title'];
 
+/** Bulk actions accepted by POST /api/notes/batch. */
+const BATCH_ACTIONS = [
+  'archive',
+  'unarchive',
+  'trash',
+  'restore',
+  'add-tag',
+  'remove-tag',
+] as const;
+type BatchAction = (typeof BATCH_ACTIONS)[number];
+
+/**
+ * Upper bound on the number of ids accepted in a single batch request. Caps the
+ * work performed per request so a single call cannot iterate an unbounded list.
+ */
+const MAX_BATCH_IDS = 1000;
+
+function isBatchAction(value: unknown): value is BatchAction {
+  return typeof value === 'string' && (BATCH_ACTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * Validate the `ids` field of a batch request. Returns a de-duplicated array of
+ * non-empty string ids, or null when the input is not a non-empty array of
+ * non-empty strings.
+ */
+function parseBatchIds(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== 'string' || item.trim() === '') return null;
+    seen.add(item);
+  }
+  return [...seen];
+}
+
+/**
+ * Resolve a batch action to a function that applies it to a single note id,
+ * returning true on success and false when the note could not be acted on
+ * (e.g. it does not exist). Tag actions require `tag` to be provided.
+ */
+function batchActionFor(
+  store: NoteStore,
+  action: BatchAction,
+  tag: string | undefined,
+): (id: string) => boolean {
+  switch (action) {
+    case 'archive':
+      return (id) => store.setArchived(id, true) !== undefined;
+    case 'unarchive':
+      return (id) => store.setArchived(id, false) !== undefined;
+    case 'trash':
+      return (id) => store.trash(id) !== undefined;
+    case 'restore':
+      return (id) => store.restore(id) !== undefined;
+    case 'add-tag':
+      return (id) => store.addTagToNote(id, tag as string) !== undefined;
+    case 'remove-tag':
+      return (id) => store.removeTagFromNote(id, tag as string) !== undefined;
+  }
+}
+
 function parseSortOrder(value: unknown): SortOrder | null {
   if (value === undefined) return 'newest';
   if (typeof value !== 'string') return null;
@@ -172,6 +234,71 @@ export function createNotesRouter(store: NoteStore): Router {
         ...(parsedColor !== undefined ? { color: parsedColor } : {}),
       }),
     );
+  });
+
+  // --- Batch endpoint (must be registered before /:id to avoid path conflicts) ---
+
+  /**
+   * POST /api/notes/batch — apply one action to many notes at once.
+   *
+   * Body: { ids: string[], action: BatchAction, tag?: string }
+   *   - action ∈ archive | unarchive | trash | restore | add-tag | remove-tag
+   *   - tag is required (non-empty string) for add-tag / remove-tag only.
+   *
+   * Each id is processed independently; the response reports which ids
+   * succeeded and which failed (with a reason), so a missing id never aborts
+   * the whole batch. Always responds 200 once the request validates.
+   */
+  router.post('/batch', (req: Request, res: Response) => {
+    const payload = req.body;
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+      res.status(400).json({ error: 'payload must be an object' });
+      return;
+    }
+    const { ids, action, tag } = payload as {
+      ids?: unknown;
+      action?: unknown;
+      tag?: unknown;
+    };
+
+    const parsedIds = parseBatchIds(ids);
+    if (parsedIds === null) {
+      res.status(400).json({ error: 'ids must be a non-empty array of strings' });
+      return;
+    }
+    if (parsedIds.length > MAX_BATCH_IDS) {
+      res.status(400).json({ error: `ids must contain at most ${MAX_BATCH_IDS} items` });
+      return;
+    }
+    if (!isBatchAction(action)) {
+      res.status(400).json({ error: `action must be one of: ${BATCH_ACTIONS.join(', ')}` });
+      return;
+    }
+
+    // Tag actions require a valid, trimmed tag; non-tag actions must not carry one.
+    let normalizedTag: string | undefined;
+    if (action === 'add-tag' || action === 'remove-tag') {
+      if (typeof tag !== 'string' || tag.trim() === '') {
+        res.status(400).json({ error: 'tag must be a non-empty string for tag actions' });
+        return;
+      }
+      normalizedTag = tag.trim();
+    } else if (tag !== undefined) {
+      res.status(400).json({ error: 'tag is only valid for add-tag and remove-tag actions' });
+      return;
+    }
+
+    const apply = batchActionFor(store, action, normalizedTag);
+    const succeeded: string[] = [];
+    const failed: Array<{ id: string; reason: string }> = [];
+    for (const id of parsedIds) {
+      if (apply(id)) {
+        succeeded.push(id);
+      } else {
+        failed.push({ id, reason: 'not found' });
+      }
+    }
+    res.json({ action, succeeded, failed });
   });
 
   // --- Trash endpoints (must be registered before /:id to avoid path conflicts) ---

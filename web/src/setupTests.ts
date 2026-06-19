@@ -45,6 +45,7 @@ vi.mock('lucide-react', () => {
     Italic: IconStub,
     Link: IconStub,
     List: IconStub,
+    Menu: IconStub,
     Moon: IconStub,
     MoreHorizontal: IconStub,
     Paperclip: IconStub,

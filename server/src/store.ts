@@ -143,6 +143,49 @@ export class NoteStore {
   }
 
   /**
+   * Explicitly set a note's archived flag (idempotent). Unlike
+   * {@link toggleArchive}, the resulting state does not depend on the prior
+   * state, which makes it safe for bulk operations where the caller wants a
+   * deterministic outcome regardless of each note's starting point.
+   * Returns the updated note, or undefined if the note does not exist.
+   */
+  setArchived(id: string, archived: boolean): Note | undefined {
+    const existing = this.notes.get(id);
+    if (!existing) return undefined;
+    const updated: Note = { ...existing, archived };
+    this.notes.set(id, updated);
+    return updated;
+  }
+
+  /**
+   * Add a tag to a single note (idempotent — a tag already present is left
+   * untouched). Returns the updated note, or undefined if the note does not
+   * exist. The tag is assumed to be validated/trimmed by the caller.
+   */
+  addTagToNote(id: string, tag: string): Note | undefined {
+    const existing = this.notes.get(id);
+    if (!existing) return undefined;
+    if (existing.tags.includes(tag)) return existing;
+    const updated: Note = { ...existing, tags: [...existing.tags, tag] };
+    this.notes.set(id, updated);
+    return updated;
+  }
+
+  /**
+   * Remove a tag from a single note (idempotent — a tag that is absent leaves
+   * the note unchanged). Returns the updated note, or undefined if the note
+   * does not exist.
+   */
+  removeTagFromNote(id: string, tag: string): Note | undefined {
+    const existing = this.notes.get(id);
+    if (!existing) return undefined;
+    if (!existing.tags.includes(tag)) return existing;
+    const updated: Note = { ...existing, tags: existing.tags.filter((t) => t !== tag) };
+    this.notes.set(id, updated);
+    return updated;
+  }
+
+  /**
    * Soft-delete: move a note to trash by setting `deletedAt` to the current
    * wall-clock timestamp.  Returns the updated note, or undefined if missing.
    */

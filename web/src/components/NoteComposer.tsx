@@ -6,6 +6,7 @@ import { countWords, countChars } from '../wordCount';
 import { TagSuggestionsInput } from './TagSuggestionsInput';
 import { MarkdownToolbar, shortcutAction } from './MarkdownToolbar';
 import { applyMarkdown } from '../markdownFormat';
+import { NOTE_TEMPLATES, templateSeed, type TemplateSeed } from '../noteTemplates';
 import styles from './NoteComposer.module.css';
 
 export interface NoteComposerProps {
@@ -21,6 +22,12 @@ export interface NoteComposerProps {
   onColorChange: (color: NoteColor) => void;
   onSubmit: (e: FormEvent) => void;
   newNoteTitleRef: RefObject<HTMLInputElement>;
+  /**
+   * Called when the user picks a built-in template. Receives the seed values
+   * (title/body/tagsInput/color) the composer fields should be set to. When
+   * omitted, the template picker is hidden.
+   */
+  onApplyTemplate?: (seed: TemplateSeed) => void;
   /**
    * When true the composer is hosted inside a modal dialog that already
    * supplies the panel chrome and "New note" heading, so the form drops its
@@ -41,6 +48,7 @@ export function NoteComposer({
   onColorChange,
   onSubmit,
   newNoteTitleRef,
+  onApplyTemplate,
   embedded = false,
 }: NoteComposerProps) {
   const words = countWords(body);
@@ -76,6 +84,24 @@ export function NoteComposer({
             <PenLine size={16} className={styles.formTitleIcon} aria-hidden="true" />
             <h2 className={styles.formTitle}>New note</h2>
           </div>
+        )}
+
+        {onApplyTemplate && (
+          <fieldset className={styles.templateFieldset}>
+            <legend className={styles.templateLegend}>Start from a template</legend>
+            <div className={styles.templatePicker}>
+              {NOTE_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className={styles.templateButton}
+                  onClick={() => onApplyTemplate(templateSeed(template))}
+                >
+                  {template.label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
         )}
 
         <label className={styles.field}>
