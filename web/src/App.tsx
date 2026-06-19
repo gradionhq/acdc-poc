@@ -9,6 +9,7 @@ import {
   type FormEvent,
 } from 'react';
 import {
+  batchNotes,
   createNote,
   deleteAttachment,
   deleteNote,
@@ -19,6 +20,7 @@ import {
   permanentDeleteNote,
   rateLimitMessage,
   RateLimitError,
+  reorderPins,
   restoreNote,
   listTags,
   toggleArchive,
@@ -44,13 +46,17 @@ import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 import { AppShell } from './components/AppShell';
 import { FilterBar } from './components/FilterBar';
 import { HeaderBar } from './components/HeaderBar';
-import { Sidebar, type AppView } from './components/Sidebar';
+import { Sidebar, type AppView, type SidebarCounts } from './components/Sidebar';
 import { NoteComposer } from './components/NoteComposer';
 import type { TemplateSeed } from './noteTemplates';
 import { NoteList } from './components/NoteList';
+import { BulkActionBar } from './components/BulkActionBar';
 import { Pagination } from './components/Pagination';
 import { Button } from './components/Button';
+import { useSelection, selectAllStateFor } from './useSelection';
+import { CheckSquare } from 'lucide-react';
 import { exportNotes, type ExportFormat } from './noteExport';
+import { dropPin, movePin, sameOrder } from './reorderPins';
 import styles from './App.module.css';
 
 const PAGE_SIZE = 5;
@@ -176,6 +182,13 @@ export function App() {
   /** noteId → true while a drag is active over that note's dropzone. */
   const [dragOver, setDragOver] = useState<Record<string, boolean>>({});
 
+  /** Whether the list is in multi-select mode (shows per-note checkboxes). */
+  const [selectionMode, setSelectionMode] = useState(false);
+  /** Selected-note ids and the helpers driving the bulk-action bar. */
+  const selection = useSelection();
+  /** True while a bulk (batch) request is in flight — disables the action bar. */
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   // True only on the very first load — gates the skeleton so background
   // refreshes after mutations do not flash the whole list.
   const [initialLoading, setInitialLoading] = useState(true);
@@ -197,6 +210,19 @@ export function App() {
   const showArchived = view === 'archived';
   const showTrash = view === 'trash';
   const showTagManager = view === 'tags';
+
+  // Counts shown as badges in the sidebar. We only surface numbers we can state
+  // accurately without extra fetches: the tag count (always loaded) and the
+  // total for the active list view when it is unfiltered (so the number is the
+  // true view total rather than a filtered subset). A filtered list omits its
+  // badge instead of showing a misleading count.
+  const unfilteredList = query === '' && tagFilter === '';
+  const sidebarCounts: SidebarCounts = { tags: tags.length };
+  if (showTrash) {
+    sidebarCounts.trash = trashedNotes.length;
+  } else if (!showTagManager && unfilteredList) {
+    sidebarCounts[view] = total;
+  }
 
   /** Parse a comma-separated tag filter string into a trimmed, non-empty, deduplicated tag list. */
   function parseTagFilter(raw: string): string[] {
@@ -508,6 +534,43 @@ export function App() {
     }
   }
 
+  /**
+   * Reorder the pinned group and persist the new order via the API.
+   *
+   * Pinned notes always sort first but may span multiple pages, so we fetch the
+   * full active list to recover the complete pinned order (the server requires
+   * the entire set). The new order is computed by the pure {@link movePin} /
+   * {@link dropPin} helpers, sent to the server, then the visible page is
+   * refreshed. A no-op move (already at the edge, dropped on itself) skips the
+   * request entirely.
+   */
+  async function onReorderPin(
+    id: string,
+    move: { direction: 'up' | 'down' } | { targetId: string },
+  ) {
+    try {
+      // Recover the complete top-to-bottom pinned order across all pages.
+      const probe = await listNotes(1, PAGE_SIZE, '', '', sort);
+      const full = probe.total <= PAGE_SIZE ? probe : await listNotes(1, probe.total, '', '', sort);
+      const pinnedOrder = full.notes
+        .filter((n) => n.pinned && n.deletedAt === null)
+        .map((n) => n.id);
+
+      const next =
+        'direction' in move
+          ? movePin(pinnedOrder, id, move.direction)
+          : dropPin(pinnedOrder, id, move.targetId);
+
+      if (sameOrder(pinnedOrder, next)) return; // nothing actually moved
+      await reorderPins(next);
+      setError(null);
+      await refresh(page);
+    } catch (e: unknown) {
+      notifyError(e, 'Failed to reorder pinned notes');
+      setError(e instanceof Error ? e.message : 'An unexpected error occurred');
+    }
+  }
+
   async function onToggleArchive(id: string, currentlyArchived: boolean) {
     try {
       await toggleArchive(id);
@@ -784,6 +847,7 @@ export function App() {
     if (next === view) return;
     setPage(1);
     setEditingId(null);
+    selection.clear();
     setView(next);
   }
 
@@ -807,6 +871,52 @@ export function App() {
     void refresh(page, query, tagFilter);
     void refreshTags();
     void refreshTagSuggestions();
+  }
+
+  // ── Bulk selection / actions ──────────────────────────────────────────────
+
+  /** Ids of the notes currently visible on the page (the select-all scope). */
+  const visibleIds = displayedNotes.map((n) => n.id);
+  const selectAllState = selectAllStateFor(visibleIds, selection.isSelected);
+
+  /** Toggle selection mode; leaving it always clears any pending selection. */
+  function onToggleSelectionMode() {
+    setSelectionMode((on) => {
+      if (on) selection.clear();
+      return !on;
+    });
+  }
+
+  /**
+   * Apply a bulk action to the selected notes via the batch API, then refresh
+   * the list, tags, and clear the selection. A partial failure (some ids not
+   * found) surfaces as a non-blocking toast but is not treated as fatal.
+   */
+  async function runBulkAction(
+    action: 'archive' | 'trash' | 'add-tag',
+    label: string,
+    tag?: string,
+  ) {
+    const ids = selection.selectedIds;
+    if (ids.length === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      const result = await batchNotes(ids, action, tag);
+      const ok = result.succeeded.length;
+      if (result.failed.length > 0) {
+        addToast(`${label} ${ok} note(s); ${result.failed.length} could not be updated.`, 'error');
+      } else {
+        addToast(`${label} ${ok} note(s).`, 'success');
+      }
+      selection.clear();
+      await refresh(page);
+      void refreshTags();
+      void refreshTagSuggestions();
+    } catch (e) {
+      notifyError(e, `Failed to ${action.replace('-', ' ')} the selected notes.`);
+    } finally {
+      setBulkBusy(false);
+    }
   }
 
   /**
@@ -903,6 +1013,7 @@ export function App() {
       onEditStart={onEditStart}
       onTogglePin={(id, pinned) => void onTogglePin(id, pinned)}
       onToggleArchive={(id, archived) => void onToggleArchive(id, archived)}
+      onReorderPin={showTrash ? undefined : (id, move) => void onReorderPin(id, move)}
       onDeleteRequest={onDeleteRequest}
       onDuplicate={(id) => void onDuplicate(id)}
       onRestore={(id) => void onRestore(id)}
@@ -918,6 +1029,9 @@ export function App() {
       onDrop={onDrop}
       onDeleteAttachment={onDeleteAttachment}
       newNoteTitleRef={newNoteTitleRef}
+      selectable={selectionMode}
+      isSelected={selection.isSelected}
+      onToggleSelect={selection.toggle}
     />
   );
 
@@ -951,7 +1065,7 @@ export function App() {
           helpCloseBtnRef={helpCloseBtnRef}
         />
       }
-      sidebar={<Sidebar view={view} onSelectView={onSelectView} />}
+      sidebar={<Sidebar view={view} onSelectView={onSelectView} counts={sidebarCounts} />}
     >
       {errorBanner}
 
@@ -977,6 +1091,33 @@ export function App() {
             }}
             tags={tags}
           />
+
+          {!showTrash && !showEmptyState && (
+            <div className={styles.selectionControls}>
+              <Button
+                variant={selectionMode ? 'primary' : 'secondary'}
+                onClick={onToggleSelectionMode}
+                aria-pressed={selectionMode}
+                aria-label={selectionMode ? 'Exit selection mode' : 'Select notes'}
+              >
+                <CheckSquare size={16} aria-hidden="true" />
+                {selectionMode ? 'Done' : 'Select'}
+              </Button>
+            </div>
+          )}
+
+          {selectionMode && !showTrash && (
+            <BulkActionBar
+              count={selection.count}
+              selectAllState={selectAllState}
+              onToggleSelectAll={() => selection.toggleSelectAll(visibleIds)}
+              onClear={selection.clear}
+              onArchive={() => void runBulkAction('archive', 'Archived')}
+              onTrash={() => void runBulkAction('trash', 'Trashed')}
+              onAddTag={(tag) => void runBulkAction('add-tag', 'Tagged', tag)}
+              busy={bulkBusy}
+            />
+          )}
 
           {noteList}
 

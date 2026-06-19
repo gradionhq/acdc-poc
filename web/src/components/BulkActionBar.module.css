@@ -1,0 +1,56 @@
+/*
+ * BulkActionBar component styles — CSS Module.
+ * All values reference design-system tokens; no magic numbers.
+ */
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.selectAll {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.count {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tagForm {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tagInput {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-base);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.clear {
+  margin-left: auto;
+}

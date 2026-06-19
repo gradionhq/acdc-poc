@@ -244,3 +244,47 @@ describe('NoteCard attachment thumbnails', () => {
     expect(link).toHaveAttribute('aria-label', 'Download thumbnail for image.webp');
   });
 });
+
+describe('NoteCard selection mode', () => {
+  it('shows no checkbox and no aria-selected outside selection mode', () => {
+    render(
+      <ul>
+        <NoteCard {...makeProps()} />
+      </ul>,
+    );
+    expect(screen.queryByRole('checkbox', { name: /select test note/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('listitem')).not.toHaveAttribute('aria-selected');
+  });
+
+  it('renders a labelled checkbox reflecting the selected state', () => {
+    render(
+      <ul>
+        <NoteCard {...makeProps({ selectable: true, selected: true })} />
+      </ul>,
+    );
+    const checkbox = screen.getByRole('checkbox', { name: 'Select Test Note' });
+    expect(checkbox).toBeChecked();
+    expect(screen.getByRole('listitem')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('exposes aria-selected=false when selectable but not selected', () => {
+    render(
+      <ul>
+        <NoteCard {...makeProps({ selectable: true, selected: false })} />
+      </ul>,
+    );
+    expect(screen.getByRole('checkbox', { name: 'Select Test Note' })).not.toBeChecked();
+    expect(screen.getByRole('listitem')).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('calls onToggleSelect with the note id when the checkbox is clicked', async () => {
+    const onToggleSelect = vi.fn();
+    render(
+      <ul>
+        <NoteCard {...makeProps({ selectable: true, onToggleSelect })} />
+      </ul>,
+    );
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Test Note' }));
+    expect(onToggleSelect).toHaveBeenCalledWith('1');
+  });
+});

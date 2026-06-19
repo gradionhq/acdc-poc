@@ -24,3 +24,11 @@
 .errorMessage {
   flex: 1;
 }
+
+/* ── Selection mode controls ─────────────────────────────────── */
+
+.selectionControls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-3);
+}

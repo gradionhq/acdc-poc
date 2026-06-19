@@ -1,3 +1,6 @@
+import { type Database as DatabaseType, type Statement } from 'better-sqlite3';
+import { openDatabase, resolveDbPath } from './db.js';
+
 /** Fixed palette of named color labels. */
 export const NOTE_COLORS = ['none', 'red', 'yellow', 'green', 'blue', 'purple'] as const;
 export type NoteColor = (typeof NOTE_COLORS)[number];
@@ -19,6 +22,12 @@ export interface Note {
   archived: boolean;
   color: NoteColor;
   deletedAt: number | null;
+  /**
+   * Explicit position within the pinned group. A smaller value sorts earlier.
+   * Always null for unpinned notes; a non-negative integer for pinned notes.
+   * Drives drag-to-reorder / keyboard reorder of pinned notes.
+   */
+  pinnedOrder: number | null;
 }
 
 export interface Attachment {
@@ -28,7 +37,7 @@ export interface Attachment {
   contentType: string;
   /** Byte length of the file data. */
   size: number;
-  /** Raw file bytes held in memory. */
+  /** Raw file bytes. */
   data: Buffer;
 }
 
@@ -54,49 +63,195 @@ export type SortOrder = 'newest' | 'oldest' | 'title';
 /** Valid values for the tagMode query parameter. */
 export type TagMode = 'and' | 'or';
 
+/** Construction options for {@link NoteStore}. */
+export interface NoteStoreOptions {
+  /**
+   * Filesystem path to the SQLite database file. When omitted, falls back to
+   * the `NOTES_DB_PATH` environment variable, and finally to an in-memory
+   * database (`:memory:`) — the default that keeps tests hermetic.
+   */
+  path?: string;
+}
+
+/** Row shape as stored in the `notes` table (integers for booleans). */
+interface NoteRow {
+  id: string;
+  title: string;
+  body: string;
+  tags: string;
+  createdAt: number;
+  pinned: number;
+  archived: number;
+  color: string;
+  deletedAt: number | null;
+  pinnedOrder: number | null;
+}
+
+/**
+ * Persistent note store backed by SQLite (via better-sqlite3, a synchronous
+ * driver — so every method keeps its original synchronous contract). The public
+ * API is unchanged from the former in-memory implementation; only the storage
+ * backend differs. Notes, attachments and tag colors all survive a restart when
+ * a file-backed database is used.
+ */
 export class NoteStore {
-  private readonly notes = new Map<string, Note>();
-  /**
-   * Attachments are keyed by `${noteId}/${sanitisedFilename}`.
-   * The key is constructed internally — never derived directly from client input.
-   */
-  private readonly attachments = new Map<string, Attachment>();
-  /**
-   * Optional per-tag color, keyed by tag name. A tag is absent from this map
-   * until a color is explicitly assigned; absence means "use the default chip
-   * style". Independent of note colors.
-   */
-  private readonly tagColors = new Map<string, TagColor>();
-  private seq = 0;
+  private readonly db: DatabaseType;
+
+  /** Maximum number of attachments allowed per note. */
+  static readonly MAX_ATTACHMENTS_PER_NOTE = 20;
+
+  // Prepared statements, compiled once per connection.
+  private readonly stmtInsertNote: Statement;
+  private readonly stmtGetNote: Statement;
+  private readonly stmtUpdateNote: Statement;
+  private readonly stmtDeleteNote: Statement;
+  private readonly stmtAllNotes: Statement;
+  private readonly stmtGetSeq: Statement;
+  private readonly stmtSetSeq: Statement;
+  private readonly stmtInsertAttachment: Statement;
+  private readonly stmtGetAttachment: Statement;
+  private readonly stmtHasAttachment: Statement;
+  private readonly stmtDeleteAttachment: Statement;
+  private readonly stmtDeleteAttachmentsForNote: Statement;
+  private readonly stmtCountAttachments: Statement;
+  private readonly stmtListAttachments: Statement;
+  private readonly stmtGetTagColor: Statement;
+  private readonly stmtSetTagColor: Statement;
+  private readonly stmtDeleteTagColor: Statement;
+
+  constructor(options: NoteStoreOptions = {}) {
+    this.db = openDatabase(resolveDbPath(options.path));
+
+    this.stmtInsertNote = this.db.prepare(
+      `INSERT INTO notes (id, title, body, tags, createdAt, pinned, archived, color, deletedAt, pinnedOrder)
+       VALUES (@id, @title, @body, @tags, @createdAt, @pinned, @archived, @color, @deletedAt, @pinnedOrder)`,
+    );
+    this.stmtGetNote = this.db.prepare(`SELECT * FROM notes WHERE id = ?`);
+    this.stmtUpdateNote = this.db.prepare(
+      `UPDATE notes SET title = @title, body = @body, tags = @tags, pinned = @pinned,
+         archived = @archived, color = @color, deletedAt = @deletedAt, pinnedOrder = @pinnedOrder
+       WHERE id = @id`,
+    );
+    this.stmtDeleteNote = this.db.prepare(`DELETE FROM notes WHERE id = ?`);
+    this.stmtAllNotes = this.db.prepare(`SELECT * FROM notes`);
+    this.stmtGetSeq = this.db.prepare(`SELECT value FROM meta WHERE key = 'seq'`);
+    this.stmtSetSeq = this.db.prepare(`UPDATE meta SET value = ? WHERE key = 'seq'`);
+
+    this.stmtInsertAttachment = this.db.prepare(
+      `INSERT INTO attachments (key, noteId, filename, contentType, size, data)
+       VALUES (@key, @noteId, @filename, @contentType, @size, @data)`,
+    );
+    this.stmtGetAttachment = this.db.prepare(`SELECT * FROM attachments WHERE key = ?`);
+    this.stmtHasAttachment = this.db.prepare(`SELECT 1 FROM attachments WHERE key = ?`);
+    this.stmtDeleteAttachment = this.db.prepare(`DELETE FROM attachments WHERE key = ?`);
+    this.stmtDeleteAttachmentsForNote = this.db.prepare(`DELETE FROM attachments WHERE noteId = ?`);
+    this.stmtCountAttachments = this.db.prepare(
+      `SELECT COUNT(*) AS n FROM attachments WHERE noteId = ?`,
+    );
+    this.stmtListAttachments = this.db.prepare(
+      `SELECT filename, contentType, size FROM attachments WHERE noteId = ?`,
+    );
+
+    this.stmtGetTagColor = this.db.prepare(`SELECT color FROM tag_colors WHERE tag = ?`);
+    this.stmtSetTagColor = this.db.prepare(
+      `INSERT INTO tag_colors (tag, color) VALUES (?, ?)
+       ON CONFLICT(tag) DO UPDATE SET color = excluded.color`,
+    );
+    this.stmtDeleteTagColor = this.db.prepare(`DELETE FROM tag_colors WHERE tag = ?`);
+  }
+
+  /** Materialise a database row into the public {@link Note} shape. */
+  private rowToNote(row: NoteRow): Note {
+    return {
+      id: row.id,
+      title: row.title,
+      body: row.body,
+      tags: JSON.parse(row.tags) as string[],
+      createdAt: row.createdAt,
+      pinned: row.pinned === 1,
+      archived: row.archived === 1,
+      color: row.color as NoteColor,
+      deletedAt: row.deletedAt,
+      pinnedOrder: row.pinnedOrder,
+    };
+  }
+
+  /** Read the persisted monotonic sequence counter. */
+  private currentSeq(): number {
+    return (this.stmtGetSeq.get() as { value: number }).value;
+  }
+
+  /** Persist the next monotonic sequence value and return it. */
+  private nextSeq(): number {
+    const next = this.currentSeq() + 1;
+    this.stmtSetSeq.run(next);
+    return next;
+  }
+
+  private getRow(id: string): NoteRow | undefined {
+    return this.stmtGetNote.get(id) as NoteRow | undefined;
+  }
+
+  private hasNote(id: string): boolean {
+    return this.getRow(id) !== undefined;
+  }
+
+  /** Write the full note back to the row (used by every mutator). */
+  private putNote(note: Note): void {
+    this.stmtUpdateNote.run({
+      id: note.id,
+      title: note.title,
+      body: note.body,
+      tags: JSON.stringify(note.tags),
+      pinned: note.pinned ? 1 : 0,
+      archived: note.archived ? 1 : 0,
+      color: note.color,
+      deletedAt: note.deletedAt,
+      pinnedOrder: note.pinnedOrder,
+    });
+  }
 
   create(input: { title: string; body: string; tags?: string[]; color?: NoteColor }): Note {
-    this.seq += 1;
+    const seq = this.nextSeq();
     const note: Note = {
-      id: String(this.seq),
+      id: String(seq),
       title: input.title,
       body: input.body,
       tags: input.tags ?? [],
       // monotonic insertion counter — used purely for stable list ordering,
       // not a wall-clock timestamp (keeps pagination deterministic in tests)
-      createdAt: this.seq,
+      createdAt: seq,
       pinned: false,
       archived: false,
       color: input.color ?? 'none',
       deletedAt: null,
+      pinnedOrder: null,
     };
-    this.notes.set(note.id, note);
+    this.stmtInsertNote.run({
+      id: note.id,
+      title: note.title,
+      body: note.body,
+      tags: JSON.stringify(note.tags),
+      createdAt: note.createdAt,
+      pinned: 0,
+      archived: 0,
+      color: note.color,
+      deletedAt: null,
+      pinnedOrder: null,
+    });
     return note;
   }
 
   get(id: string): Note | undefined {
-    return this.notes.get(id);
+    const row = this.getRow(id);
+    return row ? this.rowToNote(row) : undefined;
   }
 
   update(
     id: string,
     input: { title?: string; body?: string; tags?: string[]; color?: NoteColor },
   ): Note | undefined {
-    const existing = this.notes.get(id);
+    const existing = this.get(id);
     if (!existing) return undefined;
     const updated: Note = {
       ...existing,
@@ -105,7 +260,7 @@ export class NoteStore {
       ...(input.tags !== undefined ? { tags: input.tags } : {}),
       ...(input.color !== undefined ? { color: input.color } : {}),
     };
-    this.notes.set(id, updated);
+    this.putNote(updated);
     return updated;
   }
 
@@ -116,7 +271,7 @@ export class NoteStore {
    * Returns undefined when the source note does not exist.
    */
   duplicate(id: string): Note | undefined {
-    const source = this.notes.get(id);
+    const source = this.get(id);
     if (!source) return undefined;
     return this.create({
       title: `Copy of ${source.title}`,
@@ -127,18 +282,72 @@ export class NoteStore {
   }
 
   togglePin(id: string): Note | undefined {
-    const existing = this.notes.get(id);
+    const existing = this.get(id);
     if (!existing) return undefined;
-    const updated: Note = { ...existing, pinned: !existing.pinned };
-    this.notes.set(id, updated);
+    const willPin = !existing.pinned;
+    const updated: Note = {
+      ...existing,
+      pinned: willPin,
+      // Pinning appends the note to the end of the pinned group (largest order);
+      // unpinning clears the order so it rejoins the normal secondary sort.
+      pinnedOrder: willPin ? this.nextPinnedOrder() : null,
+    };
+    this.putNote(updated);
     return updated;
   }
 
+  /**
+   * Compute the order value for a newly pinned note: one greater than the
+   * largest `pinnedOrder` currently in use, so the note appends to the end of
+   * the pinned group. Returns 0 when no pinned note carries an order yet.
+   */
+  private nextPinnedOrder(): number {
+    let max = -1;
+    for (const note of this.allNotes()) {
+      if (note.pinnedOrder !== null && note.pinnedOrder > max) {
+        max = note.pinnedOrder;
+      }
+    }
+    return max + 1;
+  }
+
+  /**
+   * Persist an explicit ordering for the pinned notes identified by `ids`.
+   *
+   * Every id must reference an existing, currently-pinned, non-trashed note;
+   * otherwise the call is rejected wholesale (returns false) and nothing is
+   * changed. On success each listed note's `pinnedOrder` is set to its index in
+   * `ids` (0-based), so the supplied sequence becomes the new top-to-bottom
+   * order of the pinned group. Returns true.
+   *
+   * The caller is responsible for supplying the complete set of pinned ids;
+   * pinned notes omitted from `ids` keep their previous order values and may
+   * therefore interleave unpredictably — the route layer validates completeness.
+   */
+  reorderPinned(ids: string[]): boolean {
+    const notes = ids.map((id) => this.get(id));
+    // Reject unless every id resolves to an existing, pinned, active note.
+    if (notes.some((n) => n === undefined || !n.pinned || n.deletedAt !== null)) {
+      return false;
+    }
+    notes.forEach((note, index) => {
+      this.putNote({ ...(note as Note), pinnedOrder: index });
+    });
+    return true;
+  }
+
+  /** Return the ids of all active (non-trashed) pinned notes. */
+  pinnedIds(): string[] {
+    return this.allNotes()
+      .filter((n) => n.pinned && n.deletedAt === null)
+      .map((n) => n.id);
+  }
+
   toggleArchive(id: string): Note | undefined {
-    const existing = this.notes.get(id);
+    const existing = this.get(id);
     if (!existing) return undefined;
     const updated: Note = { ...existing, archived: !existing.archived };
-    this.notes.set(id, updated);
+    this.putNote(updated);
     return updated;
   }
 
@@ -150,10 +359,10 @@ export class NoteStore {
    * Returns the updated note, or undefined if the note does not exist.
    */
   setArchived(id: string, archived: boolean): Note | undefined {
-    const existing = this.notes.get(id);
+    const existing = this.get(id);
     if (!existing) return undefined;
     const updated: Note = { ...existing, archived };
-    this.notes.set(id, updated);
+    this.putNote(updated);
     return updated;
   }
 
@@ -163,11 +372,11 @@ export class NoteStore {
    * exist. The tag is assumed to be validated/trimmed by the caller.
    */
   addTagToNote(id: string, tag: string): Note | undefined {
-    const existing = this.notes.get(id);
+    const existing = this.get(id);
     if (!existing) return undefined;
     if (existing.tags.includes(tag)) return existing;
     const updated: Note = { ...existing, tags: [...existing.tags, tag] };
-    this.notes.set(id, updated);
+    this.putNote(updated);
     return updated;
   }
 
@@ -177,11 +386,11 @@ export class NoteStore {
    * does not exist.
    */
   removeTagFromNote(id: string, tag: string): Note | undefined {
-    const existing = this.notes.get(id);
+    const existing = this.get(id);
     if (!existing) return undefined;
     if (!existing.tags.includes(tag)) return existing;
     const updated: Note = { ...existing, tags: existing.tags.filter((t) => t !== tag) };
-    this.notes.set(id, updated);
+    this.putNote(updated);
     return updated;
   }
 
@@ -190,10 +399,10 @@ export class NoteStore {
    * wall-clock timestamp.  Returns the updated note, or undefined if missing.
    */
   trash(id: string): Note | undefined {
-    const existing = this.notes.get(id);
+    const existing = this.get(id);
     if (!existing) return undefined;
     const updated: Note = { ...existing, deletedAt: Date.now() };
-    this.notes.set(id, updated);
+    this.putNote(updated);
     return updated;
   }
 
@@ -202,10 +411,10 @@ export class NoteStore {
    * Returns the updated note, or undefined if the note does not exist.
    */
   restore(id: string): Note | undefined {
-    const existing = this.notes.get(id);
+    const existing = this.get(id);
     if (!existing) return undefined;
     const updated: Note = { ...existing, deletedAt: null };
-    this.notes.set(id, updated);
+    this.putNote(updated);
     return updated;
   }
 
@@ -214,13 +423,10 @@ export class NoteStore {
    * Returns true on success, false if the note was not found.
    */
   permanentDelete(id: string): boolean {
-    if (!this.notes.delete(id)) return false;
+    const info = this.stmtDeleteNote.run(id);
+    if (info.changes === 0) return false;
     // Remove all attachments belonging to this note
-    for (const key of this.attachments.keys()) {
-      if (key.startsWith(`${id}/`)) {
-        this.attachments.delete(key);
-      }
-    }
+    this.stmtDeleteAttachmentsForNote.run(id);
     return true;
   }
 
@@ -232,9 +438,6 @@ export class NoteStore {
   delete(id: string): boolean {
     return this.permanentDelete(id);
   }
-
-  /** Maximum number of attachments allowed per note. */
-  static readonly MAX_ATTACHMENTS_PER_NOTE = 20;
 
   /**
    * Sanitise the client-supplied filename to a safe basename.
@@ -258,51 +461,59 @@ export class NoteStore {
     noteId: string,
     input: { filename: string; contentType: string; data: Buffer },
   ): AttachmentMeta | undefined {
-    if (!this.notes.has(noteId)) return undefined;
+    if (!this.hasNote(noteId)) return undefined;
 
     // Enforce per-note attachment cap.
-    const prefix = `${noteId}/`;
-    const existingCount = [...this.attachments.keys()].filter((k) => k.startsWith(prefix)).length;
-    if (existingCount >= NoteStore.MAX_ATTACHMENTS_PER_NOTE) return undefined;
+    if (this.attachmentCount(noteId) >= NoteStore.MAX_ATTACHMENTS_PER_NOTE) return undefined;
 
     let safeName = this.sanitiseFilename(input.filename);
     let key = `${noteId}/${safeName}`;
 
     // Avoid silent overwrite on collision — append a numeric suffix.
-    if (this.attachments.has(key)) {
+    if (this.attachmentKeyExists(key)) {
       const dot = safeName.lastIndexOf('.');
       const stem = dot > 0 ? safeName.slice(0, dot) : safeName;
       const ext = dot > 0 ? safeName.slice(dot) : '';
       let i = 1;
-      while (this.attachments.has(`${noteId}/${stem}-${i}${ext}`)) i++;
+      while (this.attachmentKeyExists(`${noteId}/${stem}-${i}${ext}`)) i++;
       safeName = `${stem}-${i}${ext}`;
       key = `${noteId}/${safeName}`;
     }
 
-    const attachment: Attachment = {
+    const size = input.data.byteLength;
+    this.stmtInsertAttachment.run({
+      key,
+      noteId,
       filename: safeName,
       contentType: input.contentType,
-      size: input.data.byteLength,
+      size,
       data: input.data,
-    };
-    this.attachments.set(key, attachment);
-    return { filename: safeName, contentType: attachment.contentType, size: attachment.size };
+    });
+    return { filename: safeName, contentType: input.contentType, size };
+  }
+
+  private attachmentKeyExists(key: string): boolean {
+    return this.stmtHasAttachment.get(key) !== undefined;
   }
 
   /** Returns the number of attachments currently stored for the given note. */
   attachmentCount(noteId: string): number {
-    const prefix = `${noteId}/`;
-    let count = 0;
-    for (const key of this.attachments.keys()) {
-      if (key.startsWith(prefix)) count++;
-    }
-    return count;
+    return (this.stmtCountAttachments.get(noteId) as { n: number }).n;
   }
 
   getAttachment(noteId: string, filename: string): Attachment | undefined {
-    if (!this.notes.has(noteId)) return undefined;
+    if (!this.hasNote(noteId)) return undefined;
     const safeName = this.sanitiseFilename(filename);
-    return this.attachments.get(`${noteId}/${safeName}`);
+    const row = this.stmtGetAttachment.get(`${noteId}/${safeName}`) as
+      | { filename: string; contentType: string; size: number; data: Buffer }
+      | undefined;
+    if (!row) return undefined;
+    return {
+      filename: row.filename,
+      contentType: row.contentType,
+      size: row.size,
+      data: row.data,
+    };
   }
 
   /**
@@ -311,21 +522,20 @@ export class NoteStore {
    * does not, and `undefined` if the note itself does not exist.
    */
   deleteAttachment(noteId: string, filename: string): boolean | undefined {
-    if (!this.notes.has(noteId)) return undefined;
+    if (!this.hasNote(noteId)) return undefined;
     const safeName = this.sanitiseFilename(filename);
-    return this.attachments.delete(`${noteId}/${safeName}`);
+    return this.stmtDeleteAttachment.run(`${noteId}/${safeName}`).changes > 0;
   }
 
   listAttachments(noteId: string): AttachmentMeta[] | undefined {
-    if (!this.notes.has(noteId)) return undefined;
-    const prefix = `${noteId}/`;
-    const result: AttachmentMeta[] = [];
-    for (const [key, att] of this.attachments) {
-      if (key.startsWith(prefix)) {
-        result.push({ filename: att.filename, contentType: att.contentType, size: att.size });
-      }
-    }
-    return result;
+    if (!this.hasNote(noteId)) return undefined;
+    const rows = this.stmtListAttachments.all(noteId) as AttachmentMeta[];
+    return rows.map((r) => ({ filename: r.filename, contentType: r.contentType, size: r.size }));
+  }
+
+  /** Load every note row as materialised {@link Note} objects. */
+  private allNotes(): Note[] {
+    return (this.stmtAllNotes.all() as NoteRow[]).map((row) => this.rowToNote(row));
   }
 
   /**
@@ -335,14 +545,14 @@ export class NoteStore {
    */
   listTags(): Array<{ tag: string; count: number; color: TagColor | null }> {
     const counts = new Map<string, number>();
-    for (const note of this.notes.values()) {
+    for (const note of this.allNotes()) {
       if (note.deletedAt !== null) continue; // exclude trashed notes
       for (const tag of note.tags) {
         counts.set(tag, (counts.get(tag) ?? 0) + 1);
       }
     }
     return [...counts.entries()]
-      .map(([tag, count]) => ({ tag, count, color: this.tagColors.get(tag) ?? null }))
+      .map(([tag, count]) => ({ tag, count, color: this.getTagColor(tag) ?? null }))
       .sort((a, b) => a.tag.localeCompare(b.tag));
   }
 
@@ -351,12 +561,13 @@ export class NoteStore {
    * need to be in use by any note for a color to be stored.
    */
   setTagColor(tag: string, color: TagColor): void {
-    this.tagColors.set(tag, color);
+    this.stmtSetTagColor.run(tag, color);
   }
 
   /** Return the color assigned to a tag, or undefined when none is set. */
   getTagColor(tag: string): TagColor | undefined {
-    return this.tagColors.get(tag);
+    const row = this.stmtGetTagColor.get(tag) as { color: TagColor } | undefined;
+    return row?.color;
   }
 
   /**
@@ -367,20 +578,44 @@ export class NoteStore {
    */
   renameTag(from: string, to: string): number {
     let affected = 0;
-    for (const [id, note] of this.notes.entries()) {
+    for (const note of this.allNotes()) {
       if (note.tags.includes(from)) {
         const newTags = note.tags.map((t) => (t === from ? to : t));
-        this.notes.set(id, { ...note, tags: newTags });
+        this.putNote({ ...note, tags: newTags });
         affected++;
       }
     }
     // Carry any assigned color across to the new name so the chip keeps its
     // appearance after a rename.
-    const color = this.tagColors.get(from);
+    const color = this.getTagColor(from);
     if (color !== undefined) {
-      this.tagColors.delete(from);
-      this.tagColors.set(to, color);
+      this.stmtDeleteTagColor.run(from);
+      this.setTagColor(to, color);
     }
+    return affected;
+  }
+
+  /**
+   * Merge the `from` tag into the `to` tag across every note.
+   *
+   * Each note carrying `from` has it replaced by `to`, deduplicating so a note
+   * that already had both ends up with a single `to`. Notes that only had `to`
+   * are left untouched. The `from` tag's stored color (if any) is dropped; `to`
+   * keeps whatever color it already had. Returns the number of notes modified.
+   */
+  mergeTag(from: string, to: string): number {
+    let affected = 0;
+    for (const note of this.allNotes()) {
+      if (!note.tags.includes(from)) continue;
+      // Replace `from` with `to`, then dedupe so a note already carrying both
+      // ends up with a single `to`.
+      const newTags = [...new Set(note.tags.map((t) => (t === from ? to : t)))];
+      this.putNote({ ...note, tags: newTags });
+      affected++;
+    }
+    // The source tag disappears, so drop any color it carried; the target keeps
+    // its own color.
+    this.stmtDeleteTagColor.run(from);
     return affected;
   }
 
@@ -390,23 +625,21 @@ export class NoteStore {
    */
   deleteTag(tag: string): number {
     let affected = 0;
-    for (const [id, note] of this.notes.entries()) {
+    for (const note of this.allNotes()) {
       if (note.tags.includes(tag)) {
-        this.notes.set(id, { ...note, tags: note.tags.filter((t) => t !== tag) });
+        this.putNote({ ...note, tags: note.tags.filter((t) => t !== tag) });
         affected++;
       }
     }
     // Drop any stored color for the removed tag.
-    this.tagColors.delete(tag);
+    this.stmtDeleteTagColor.run(tag);
     return affected;
   }
 
   /** Test-only: clear all notes and attachments and reset the id sequence. */
   reset(): void {
-    this.notes.clear();
-    this.attachments.clear();
-    this.tagColors.clear();
-    this.seq = 0;
+    this.db.exec('DELETE FROM notes; DELETE FROM attachments; DELETE FROM tag_colors;');
+    this.stmtSetSeq.run(0);
   }
 
   list(
@@ -423,10 +656,21 @@ export class NoteStore {
     const tagFilter = tag ? tag.trim().toLowerCase() : '';
     // Normalise the multi-tag list to lowercase; empty array = no filter.
     const multiTags = (tags ?? []).map((t) => t.toLowerCase()).filter((t) => t !== '');
-    const all = [...this.notes.values()]
+    const all = this.allNotes()
       .sort((a, b) => {
         // Pinned notes always sort before unpinned regardless of secondary sort.
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        // Within the pinned group, honour the explicit drag/keyboard order.
+        // A note with an assigned order sorts ahead of one without; ties (both
+        // null, e.g. pinned before the ordering feature shipped) fall through to
+        // the secondary sort below for a stable, predictable result.
+        if (a.pinned && b.pinned) {
+          const ao = a.pinnedOrder;
+          const bo = b.pinnedOrder;
+          if (ao !== null && bo !== null && ao !== bo) return ao - bo;
+          if (ao !== null && bo === null) return -1;
+          if (ao === null && bo !== null) return 1;
+        }
         // Within each pin group apply the requested secondary sort.
         if (sort === 'oldest') return a.createdAt - b.createdAt;
         if (sort === 'title') return a.title.localeCompare(b.title);
@@ -469,7 +713,7 @@ export class NoteStore {
    * most-recently trashed first.
    */
   listTrashed(): Note[] {
-    return [...this.notes.values()]
+    return this.allNotes()
       .filter((n) => n.deletedAt !== null)
       .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
   }
@@ -489,11 +733,11 @@ export class NoteStore {
   purgeExpiredTrash(retentionMs: number, now: number = Date.now()): number {
     const cutoff = now - retentionMs;
     let purged = 0;
-    for (const [id, note] of this.notes.entries()) {
+    for (const note of this.allNotes()) {
       // Only trashed notes are eligible; active/archived notes are left intact.
       if (note.deletedAt === null) continue;
       if (note.deletedAt <= cutoff) {
-        this.permanentDelete(id);
+        this.permanentDelete(note.id);
         purged += 1;
       }
     }
