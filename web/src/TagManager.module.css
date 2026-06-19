@@ -90,6 +90,29 @@
   box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
 
+.mergeInto {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.mergeSelect {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-surface-border);
+  border-radius: var(--radius-base);
+  transition: border-color 0.15s ease;
+}
+
+.mergeSelect:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
 /* ── Per-tag color picker swatches ───────────────────────────── */
 
 .colorPicker {

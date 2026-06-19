@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   deleteTag,
   listTags,
+  mergeTag,
   renameTag,
   setTagColor,
   TAG_COLORS,
@@ -10,12 +11,16 @@ import {
 } from './api';
 import { Button } from './components/Button';
 import { TagChip } from './components/TagChip';
+import { ConfirmDialog } from './ConfirmDialog';
 import styles from './TagManager.module.css';
 
 interface Props {
-  /** Called after any rename or delete so the parent can re-fetch notes. */
+  /** Called after any rename, merge or delete so the parent can re-fetch notes. */
   onChanged: () => void;
 }
+
+/** A confirmation the user must accept before a destructive change is applied. */
+type PendingConfirm = { kind: 'delete'; tag: string } | { kind: 'merge'; from: string; to: string };
 
 export function TagManager({ onChanged }: Props) {
   const [tags, setTags] = useState<TagStat[]>([]);
@@ -25,6 +30,13 @@ export function TagManager({ onChanged }: Props) {
   /** tag → rename input value while the rename row is open */
   const [renamingTag, setRenamingTag] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState('');
+
+  /** tag → chosen merge target while the merge row is open */
+  const [mergingTag, setMergingTag] = useState<string | null>(null);
+  const [mergeTarget, setMergeTarget] = useState('');
+
+  /** A destructive action awaiting confirmation, or null when none is pending. */
+  const [pending, setPending] = useState<PendingConfirm | null>(null);
 
   async function load() {
     setLoading(true);
@@ -45,6 +57,7 @@ export function TagManager({ onChanged }: Props) {
   function startRename(tag: string) {
     setRenamingTag(tag);
     setRenameInput(tag);
+    setMergingTag(null);
     setError(null);
   }
 
@@ -69,6 +82,25 @@ export function TagManager({ onChanged }: Props) {
     }
   }
 
+  function startMerge(tag: string) {
+    setMergingTag(tag);
+    setMergeTarget('');
+    setRenamingTag(null);
+    setError(null);
+  }
+
+  function cancelMerge() {
+    setMergingTag(null);
+    setMergeTarget('');
+    setError(null);
+  }
+
+  function requestMerge(from: string) {
+    const to = mergeTarget.trim();
+    if (!to) return;
+    setPending({ kind: 'merge', from, to });
+  }
+
   async function handleColorChange(tag: string, color: TagColor) {
     setError(null);
     try {
@@ -80,11 +112,23 @@ export function TagManager({ onChanged }: Props) {
     }
   }
 
-  async function handleDelete(tag: string) {
-    if (!window.confirm(`Delete tag "${tag}" from all notes?`)) return;
+  function requestDelete(tag: string) {
+    setPending({ kind: 'delete', tag });
+  }
+
+  async function confirmPending() {
+    const action = pending;
+    setPending(null);
+    if (!action) return;
     setError(null);
     try {
-      await deleteTag(tag);
+      if (action.kind === 'delete') {
+        await deleteTag(action.tag);
+      } else {
+        await mergeTag(action.from, action.to);
+        setMergingTag(null);
+        setMergeTarget('');
+      }
       await load();
       onChanged();
     } catch (e) {
@@ -106,7 +150,7 @@ export function TagManager({ onChanged }: Props) {
         <ul className={styles.tagList} aria-label="Tag list">
           {tags.map(({ tag, count, color }) => (
             <li key={tag} className={styles.tagRow}>
-              {renamingTag === tag ? (
+              {renamingTag === tag && (
                 <>
                   <input
                     aria-label={`Rename ${tag}`}
@@ -126,7 +170,40 @@ export function TagManager({ onChanged }: Props) {
                     Cancel
                   </Button>
                 </>
-              ) : (
+              )}
+              {mergingTag === tag && (
+                <>
+                  <TagChip tag={tag} color={color} className={styles.tagName} />
+                  <span className={styles.mergeInto}>into</span>
+                  <select
+                    aria-label={`Merge ${tag} into`}
+                    className={styles.mergeSelect}
+                    value={mergeTarget}
+                    onChange={(e) => setMergeTarget(e.target.value)}
+                    autoFocus
+                  >
+                    <option value="">Select a tag…</option>
+                    {tags
+                      .filter((t) => t.tag !== tag)
+                      .map((t) => (
+                        <option key={t.tag} value={t.tag}>
+                          {t.tag}
+                        </option>
+                      ))}
+                  </select>
+                  <Button
+                    variant="primary"
+                    disabled={!mergeTarget}
+                    onClick={() => requestMerge(tag)}
+                  >
+                    Merge
+                  </Button>
+                  <Button variant="secondary" onClick={cancelMerge}>
+                    Cancel
+                  </Button>
+                </>
+              )}
+              {renamingTag !== tag && mergingTag !== tag && (
                 <>
                   <TagChip tag={tag} color={color} className={styles.tagName} />
                   <span
@@ -164,9 +241,17 @@ export function TagManager({ onChanged }: Props) {
                     Rename
                   </Button>
                   <Button
+                    variant="secondary"
+                    aria-label={`Merge tag ${tag}`}
+                    disabled={tags.length < 2}
+                    onClick={() => startMerge(tag)}
+                  >
+                    Merge
+                  </Button>
+                  <Button
                     variant="danger"
                     aria-label={`Delete tag ${tag}`}
-                    onClick={() => void handleDelete(tag)}
+                    onClick={() => requestDelete(tag)}
                   >
                     Delete
                   </Button>
@@ -175,6 +260,24 @@ export function TagManager({ onChanged }: Props) {
             </li>
           ))}
         </ul>
+      )}
+      {pending?.kind === 'delete' && (
+        <ConfirmDialog
+          title="Delete tag"
+          message={`Delete tag "${pending.tag}" from all notes? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={() => void confirmPending()}
+          onCancel={() => setPending(null)}
+        />
+      )}
+      {pending?.kind === 'merge' && (
+        <ConfirmDialog
+          title="Merge tags"
+          message={`Merge "${pending.from}" into "${pending.to}"? Every note tagged "${pending.from}" will be tagged "${pending.to}" instead.`}
+          confirmLabel="Merge"
+          onConfirm={() => void confirmPending()}
+          onCancel={() => setPending(null)}
+        />
       )}
     </section>
   );

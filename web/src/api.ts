@@ -501,6 +501,20 @@ export async function renameTag(from: string, to: string): Promise<{ affected: n
   return (await res.json()) as { affected: number };
 }
 
+export async function mergeTag(from: string, to: string): Promise<{ affected: number }> {
+  const res = await fetch(`${tagsBase}/merge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!res.ok) {
+    assertNotRateLimited(res);
+    const payload = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? 'failed to merge tag');
+  }
+  return (await res.json()) as { affected: number };
+}
+
 export async function setTagColor(tag: string, color: TagColor): Promise<TagStat> {
   const res = await fetch(`${tagsBase}/${encodeURIComponent(tag)}`, {
     method: 'PUT',

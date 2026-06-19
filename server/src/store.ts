@@ -385,6 +385,28 @@ export class NoteStore {
   }
 
   /**
+   * Merge the `from` tag into the `to` tag across every note.
+   *
+   * Each note carrying `from` has it replaced by `to`, deduplicating so a note
+   * that already had both ends up with a single `to`. Notes that only had `to`
+   * are left untouched. The `from` tag's stored color (if any) is dropped; `to`
+   * keeps whatever color it already had. Returns the number of notes modified.
+   */
+  mergeTag(from: string, to: string): number {
+    let affected = 0;
+    for (const [id, note] of this.notes.entries()) {
+      if (!note.tags.includes(from)) continue;
+      const newTags = [...new Set(note.tags.map((t) => (t === from ? to : t)))];
+      this.notes.set(id, { ...note, tags: newTags });
+      affected++;
+    }
+    // The source tag disappears, so drop any color it carried; the target keeps
+    // its own color.
+    this.tagColors.delete(from);
+    return affected;
+  }
+
+  /**
    * Delete a tag from every note that carries it.
    * Returns the number of notes that were modified.
    */

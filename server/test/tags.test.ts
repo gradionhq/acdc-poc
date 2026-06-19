@@ -174,6 +174,135 @@ describe('POST /api/tags/rename', () => {
   });
 });
 
+describe('POST /api/tags/merge', () => {
+  it('merges one tag into another across all notes', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'a', body: 'b', tags: ['todo'] })
+      .expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'c', body: 'd', tags: ['todo', 'keep'] })
+      .expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'e', body: 'f', tags: ['tasks'] })
+      .expect(201);
+
+    const res = await request(app)
+      .post('/api/tags/merge')
+      .send({ from: 'todo', to: 'tasks' })
+      .expect(200);
+    expect(res.body).toMatchObject({ affected: 2 });
+
+    const list = await request(app).get('/api/notes').expect(200);
+    for (const note of list.body as Array<{ tags: string[] }>) {
+      expect(note.tags).not.toContain('todo');
+    }
+    const counts = (await request(app).get('/api/tags').expect(200)).body as Array<{
+      tag: string;
+      count: number;
+    }>;
+    const tagMap = Object.fromEntries(counts.map(({ tag, count }) => [tag, count]));
+    expect(tagMap['todo']).toBeUndefined();
+    expect(tagMap['tasks']).toBe(3);
+    expect(tagMap['keep']).toBe(1);
+  });
+
+  it('deduplicates notes that already carry both tags', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    const created = await request(app)
+      .post('/api/notes')
+      .send({ title: 'a', body: 'b', tags: ['todo', 'tasks'] })
+      .expect(201);
+
+    await request(app).post('/api/tags/merge').send({ from: 'todo', to: 'tasks' }).expect(200);
+
+    const note = await request(app).get(`/api/notes/${created.body.id}`).expect(200);
+    expect(note.body.tags).toEqual(['tasks']);
+  });
+
+  it('returns 200 with 0 affected when "from" tag does not exist (no-op)', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/tags/merge')
+      .send({ from: 'nonexistent', to: 'tasks' })
+      .expect(200);
+    expect(res.body).toMatchObject({ affected: 0 });
+  });
+
+  it('returns 400 when merging a tag into itself', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/tags/merge')
+      .send({ from: 'same', to: 'same' })
+      .expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when "from" is missing', async () => {
+    const app = createApp();
+    const res = await request(app).post('/api/tags/merge').send({ to: 'tasks' }).expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when "to" is missing', async () => {
+    const app = createApp();
+    const res = await request(app).post('/api/tags/merge').send({ from: 'todo' }).expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when "from" is empty string', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/tags/merge')
+      .send({ from: '', to: 'tasks' })
+      .expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when "to" contains a comma', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/tags/merge')
+      .send({ from: 'todo', to: 'a,b' })
+      .expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('returns 400 when "from" exceeds 100 characters', async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post('/api/tags/merge')
+      .send({ from: 'a'.repeat(101), to: 'tasks' })
+      .expect(400);
+    expect(res.body).toHaveProperty('error');
+  });
+
+  it('drops the source color and keeps the target color', async () => {
+    const store = new NoteStore();
+    const app = createApp(store);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'a', body: 'b', tags: ['todo'] })
+      .expect(201);
+    await request(app)
+      .post('/api/notes')
+      .send({ title: 'c', body: 'd', tags: ['tasks'] })
+      .expect(201);
+    await request(app).put('/api/tags/todo').send({ color: 'red' }).expect(200);
+    await request(app).put('/api/tags/tasks').send({ color: 'blue' }).expect(200);
+
+    await request(app).post('/api/tags/merge').send({ from: 'todo', to: 'tasks' }).expect(200);
+
+    expect(store.getTagColor('todo')).toBeUndefined();
+    expect(store.getTagColor('tasks')).toBe('blue');
+  });
+});
+
 describe('GET /api/tags — colors', () => {
   it('returns color: null for tags without an assigned color', async () => {
     const store = new NoteStore();

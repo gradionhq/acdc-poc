@@ -1,6 +1,12 @@
 import { Router, type Request, type Response } from 'express';
 import { NoteStore } from './store.js';
-import { parse, renameTagSchema, setTagColorSchema, tagNameParamSchema } from './schemas.js';
+import {
+  mergeTagSchema,
+  parse,
+  renameTagSchema,
+  setTagColorSchema,
+  tagNameParamSchema,
+} from './schemas.js';
 
 export function createTagsRouter(store: NoteStore): Router {
   const router = Router();
@@ -30,6 +36,28 @@ export function createTagsRouter(store: NoteStore): Router {
     }
 
     const affected = store.renameTag(fromTag, toTag);
+    res.json({ affected });
+  });
+
+  /** POST /api/tags/merge — merge one tag into another across all notes. */
+  router.post('/merge', (req: Request, res: Response) => {
+    const parsed = parse(mergeTagSchema, req.body ?? {});
+    if (!parsed.ok) {
+      res.status(400).json(parsed.failure);
+      return;
+    }
+
+    const fromTag = parsed.data.from.trim();
+    const toTag = parsed.data.to.trim();
+
+    // Merging a tag into itself is a no-op request that almost certainly
+    // indicates a mistake; reject it rather than silently doing nothing.
+    if (fromTag === toTag) {
+      res.status(400).json({ error: 'cannot merge a tag into itself' });
+      return;
+    }
+
+    const affected = store.mergeTag(fromTag, toTag);
     res.json({ affected });
   });
 

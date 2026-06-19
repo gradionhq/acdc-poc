@@ -546,6 +546,52 @@ describe('NoteStore — tag colors', () => {
   });
 });
 
+describe('NoteStore — mergeTag()', () => {
+  it('moves notes from the source tag onto the target tag', () => {
+    const store = new NoteStore();
+    const n1 = store.create({ title: 'a', body: 'A', tags: ['todo'] });
+    const n2 = store.create({ title: 'b', body: 'B', tags: ['todo', 'other'] });
+    store.create({ title: 'c', body: 'C', tags: ['tasks'] });
+
+    const affected = store.mergeTag('todo', 'tasks');
+
+    expect(affected).toBe(2);
+    expect(store.get(n1.id)?.tags).toEqual(['tasks']);
+    expect(store.get(n2.id)?.tags).toEqual(['tasks', 'other']);
+    const byTag = Object.fromEntries(store.listTags().map((t) => [t.tag, t.count]));
+    expect(byTag['todo']).toBeUndefined();
+    expect(byTag['tasks']).toBe(3);
+    expect(byTag['other']).toBe(1);
+  });
+
+  it('deduplicates when a note already carries both tags', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 'a', body: 'A', tags: ['todo', 'tasks'] });
+    const affected = store.mergeTag('todo', 'tasks');
+    expect(affected).toBe(1);
+    expect(store.get(n.id)?.tags).toEqual(['tasks']);
+  });
+
+  it('returns 0 and changes nothing when the source tag is unused', () => {
+    const store = new NoteStore();
+    const n = store.create({ title: 'a', body: 'A', tags: ['tasks'] });
+    const affected = store.mergeTag('todo', 'tasks');
+    expect(affected).toBe(0);
+    expect(store.get(n.id)?.tags).toEqual(['tasks']);
+  });
+
+  it('drops the source color and keeps the target color', () => {
+    const store = new NoteStore();
+    store.create({ title: 'a', body: 'A', tags: ['todo'] });
+    store.create({ title: 'b', body: 'B', tags: ['tasks'] });
+    store.setTagColor('todo', 'red');
+    store.setTagColor('tasks', 'blue');
+    store.mergeTag('todo', 'tasks');
+    expect(store.getTagColor('todo')).toBeUndefined();
+    expect(store.getTagColor('tasks')).toBe('blue');
+  });
+});
+
 describe('NoteStore — multi-tag filter', () => {
   it('filters with OR mode returns notes that have any of the given tags', () => {
     const store = new NoteStore();
