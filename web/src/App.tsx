@@ -44,6 +44,7 @@ import { FilterBar } from './components/FilterBar';
 import { HeaderBar } from './components/HeaderBar';
 import { Sidebar, type AppView } from './components/Sidebar';
 import { NoteComposer } from './components/NoteComposer';
+import type { TemplateSeed } from './noteTemplates';
 import { NoteList } from './components/NoteList';
 import { Pagination } from './components/Pagination';
 import { Button } from './components/Button';
@@ -664,6 +665,18 @@ export function App() {
     newNoteTriggerRef.current?.focus();
   }, []);
 
+  /**
+   * Seed the composer fields from a chosen built-in template, then return focus
+   * to the title input so the user can edit the seeded title right away.
+   */
+  const onApplyTemplate = useCallback((seed: TemplateSeed) => {
+    setTitle(seed.title);
+    setBody(seed.body);
+    setTagsInput(seed.tagsInput);
+    setColor(seed.color);
+    newNoteTitleRef.current?.focus();
+  }, []);
+
   const shortcutHandlers = {
     onNewNote: useCallback(() => {
       setComposerOpen(true);
@@ -864,6 +877,7 @@ export function App() {
             onColorChange={setColor}
             onSubmit={onSubmit}
             newNoteTitleRef={newNoteTitleRef}
+            onApplyTemplate={onApplyTemplate}
             embedded
           />
         </Modal>
