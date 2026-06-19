@@ -192,11 +192,20 @@ function parseMarkdown(raw: string): { title: string; body: string } | null {
 
   if (index >= lines.length) return null;
 
-  const headingMatch = /^(#{1,6})[ \t]+(.+)$/.exec(lines[index]);
-  if (headingMatch) {
-    // Strip optional closing '#' markers + surrounding whitespace using disjoint
-    // character classes (no nested/overlapping quantifiers → no ReDoS backtracking).
-    const title = headingMatch[2].replace(/[ \t]+#+[ \t]*$/, '').trim();
+  // Detect an ATX heading (1-6 leading '#' then a space/tab) with pure string ops —
+  // no regex, so Sonar raises no ReDoS hotspot to review.
+  const line = lines[index];
+  let hashes = 0;
+  while (hashes < line.length && line[hashes] === '#') hashes += 1;
+  const sep = line[hashes];
+  if (hashes >= 1 && hashes <= 6 && (sep === ' ' || sep === '\t')) {
+    let title = line.slice(hashes).trim();
+    // CommonMark: a trailing run of '#' preceded by whitespace is a closing sequence — strip it.
+    let h = title.length;
+    while (h > 0 && title[h - 1] === '#') h -= 1;
+    if (h < title.length && h > 0 && (title[h - 1] === ' ' || title[h - 1] === '\t')) {
+      title = title.slice(0, h).trimEnd();
+    }
     const body = lines
       .slice(index + 1)
       .join('\n')
