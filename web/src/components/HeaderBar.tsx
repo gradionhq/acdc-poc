@@ -1,6 +1,8 @@
 import type { RefObject } from 'react';
 import { HelpCircle, Moon, Plus, Search, Sun, X } from 'lucide-react';
 import { Button } from './Button';
+import { ExportMenu } from './ExportMenu';
+import type { ExportFormat } from '../noteExport';
 import { SHORTCUTS } from '../useKeyboardShortcuts';
 import styles from './HeaderBar.module.css';
 
@@ -15,6 +17,10 @@ export interface HeaderBarProps {
   onNewNote: () => void;
   /** Ref to the New-note trigger button; focus returns here when the modal closes. */
   newNoteTriggerRef?: RefObject<HTMLButtonElement>;
+  /** Export the currently displayed notes in the chosen format. */
+  onExport: (format: ExportFormat) => void;
+  /** Whether any notes are available to export (disables the export trigger). */
+  exportDisabled: boolean;
   showHelp: boolean;
   onToggleHelp: () => void;
   onCloseHelp: () => void;
@@ -35,6 +41,8 @@ export function HeaderBar({
   searchInputRef,
   onNewNote,
   newNoteTriggerRef,
+  onExport,
+  exportDisabled,
   showHelp,
   onToggleHelp,
   onCloseHelp,
@@ -63,6 +71,7 @@ export function HeaderBar({
             <Plus size={15} aria-hidden="true" className={styles.btnIcon} />
             New note
           </Button>
+          <ExportMenu disabled={exportDisabled} onExport={onExport} />
           <button
             ref={helpToggleRef}
             type="button"

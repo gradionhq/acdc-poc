@@ -47,6 +47,7 @@ import { NoteComposer } from './components/NoteComposer';
 import { NoteList } from './components/NoteList';
 import { Pagination } from './components/Pagination';
 import { Button } from './components/Button';
+import { exportNotes, type ExportFormat } from './noteExport';
 import styles from './App.module.css';
 
 const PAGE_SIZE = 5;
@@ -734,6 +735,21 @@ export function App() {
     setView(next);
   }
 
+  /**
+   * Export the currently displayed notes (the active view's list) as a single
+   * downloadable file in the chosen format. Purely client-side; no request is
+   * made. No-op when there is nothing to export.
+   */
+  function onExport(format: ExportFormat) {
+    if (displayedNotes.length === 0) return;
+    const single = displayedNotes.length === 1 ? displayedNotes[0] : null;
+    exportNotes(displayedNotes, format, single);
+    addToast(
+      `Exported ${displayedNotes.length} note${displayedNotes.length === 1 ? '' : 's'} as ${format.toUpperCase()}`,
+      'success',
+    );
+  }
+
   /** Re-fetch notes and tag metadata after the tag manager mutates tags. */
   function onTagsChanged() {
     void refresh(page, query, tagFilter);
@@ -810,6 +826,8 @@ export function App() {
           searchInputRef={searchInputRef}
           onNewNote={shortcutHandlers.onNewNote}
           newNoteTriggerRef={newNoteTriggerRef}
+          onExport={onExport}
+          exportDisabled={displayedNotes.length === 0}
           showHelp={showHelp}
           onToggleHelp={() => setShowHelp((prev) => !prev)}
           onCloseHelp={() => setShowHelp(false)}
